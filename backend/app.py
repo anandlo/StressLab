@@ -42,6 +42,7 @@ from .user_protocols import (
     list_user_protocols, create_user_protocol, delete_user_protocol,
 )
 from .email import send_verification_email
+from .db import init_db
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ event_marker = EventMarker()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_db()
     event_marker.connect()
     yield
     event_marker.close()

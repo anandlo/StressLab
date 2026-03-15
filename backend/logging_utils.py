@@ -3,14 +3,40 @@ import json
 from datetime import datetime
 from .models import SessionSummary
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        "..", "data")
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
+
+
+def _get_db():
+    """Lazy import to avoid circular imports."""
+    from . import db as _db
+    return _db
 
 
 def save_session(summary: SessionSummary) -> str:
-    os.makedirs(DATA_DIR, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"stress_session_{summary.participant_id}_{ts}.json"
+    _db = _get_db()
+    if _db.DATABASE_URL:
+        conn = _db.get_conn()
+        try:
+            data = summary.model_dump()
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO sessions (filename, participant_id, session_start,
+                       total_tasks, accuracy_pct, intensity, data, created)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (filename) DO NOTHING""",
+                    (filename, summary.participant_id,
+                     str(data.get("session_start", "")),
+                     data.get("total_tasks"), data.get("accuracy_pct"),
+                     data.get("intensity"), json.dumps(data, default=str),
+                     datetime.now().isoformat())
+                )
+            conn.commit()
+        finally:
+            conn.close()
+        return filename
+    os.makedirs(DATA_DIR, exist_ok=True)
     filepath = os.path.join(DATA_DIR, filename)
     with open(filepath, "w") as f:
         json.dump(summary.model_dump(), f, indent=2, default=str)
@@ -18,6 +44,25 @@ def save_session(summary: SessionSummary) -> str:
 
 
 def list_sessions(participant_id: str | None = None) -> list[dict]:
+    _db = _get_db()
+    if _db.DATABASE_URL:
+        conn = _db.get_conn()
+        try:
+            with conn.cursor() as cur:
+                if participant_id:
+                    cur.execute(
+                        "SELECT filename, participant_id, session_start, total_tasks, accuracy_pct, intensity"
+                        " FROM sessions WHERE participant_id = %s ORDER BY created",
+                        (participant_id,)
+                    )
+                else:
+                    cur.execute(
+                        "SELECT filename, participant_id, session_start, total_tasks, accuracy_pct, intensity"
+                        " FROM sessions ORDER BY created"
+                    )
+                return [dict(r) for r in cur.fetchall()]
+        finally:
+            conn.close()
     if not os.path.exists(DATA_DIR):
         return []
     sessions = []
@@ -41,6 +86,16 @@ def list_sessions(participant_id: str | None = None) -> list[dict]:
 
 
 def load_session(filename: str) -> dict | None:
+    _db = _get_db()
+    if _db.DATABASE_URL:
+        conn = _db.get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT data FROM sessions WHERE filename = %s", (filename,))
+                row = cur.fetchone()
+                return row["data"] if row else None
+        finally:
+            conn.close()
     filepath = os.path.join(DATA_DIR, filename)
     if os.path.exists(filepath):
         with open(filepath) as f:
