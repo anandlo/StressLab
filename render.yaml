@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: stresslab
+    runtime: python
+    buildCommand: pip install -r requirements.txt && cd frontend && npm ci && npm run build
+    startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false          # fill in from Supabase
+      - key: CORS_ORIGINS
+        sync: false          # fill in with your Render URL after first deploy
