@@ -154,3 +154,27 @@ def consume_email_verify_token(token: str) -> bool:
             _save(db)
             return True
     return False
+
+
+def delete_user(user_id: str) -> bool:
+    """Delete a user and all their owned data. Sessions are kept (research data).
+    Returns True if the user existed and was deleted."""
+    if _db.DATABASE_URL:
+        conn = _db.get_conn()
+        try:
+            with conn.cursor() as cur:
+                # Cascade: project_sessions are deleted via FK ON DELETE CASCADE on projects
+                cur.execute("DELETE FROM user_protocols WHERE user_id = %s", (user_id,))
+                cur.execute("DELETE FROM projects WHERE owner_id = %s", (user_id,))
+                cur.execute("DELETE FROM users WHERE id = %s RETURNING id", (user_id,))
+                deleted = cur.fetchone()
+            conn.commit()
+            return deleted is not None
+        finally:
+            conn.close()
+    db = _load()
+    if user_id not in db:
+        return False
+    del db[user_id]
+    _save(db)
+    return True

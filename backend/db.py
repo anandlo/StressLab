@@ -33,6 +33,8 @@ def init_db() -> None:
                     email_verify_token TEXT,
                     mfa_enabled BOOLEAN DEFAULT FALSE,
                     mfa_secret TEXT,
+                    mfa_secret_pending TEXT,
+                    field_templates JSONB DEFAULT '[]',
                     created TEXT NOT NULL
                 );
 
@@ -74,6 +76,11 @@ def init_db() -> None:
                     data JSONB NOT NULL,
                     created TEXT NOT NULL
                 );
+            """)
+            # Add columns introduced after initial deploy (safe on fresh DBs too)
+            cur.execute("""
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_secret_pending TEXT;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS field_templates JSONB DEFAULT '[]';
             """)
         conn.commit()
     finally:

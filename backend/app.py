@@ -32,7 +32,7 @@ from .auth import (
 )
 from .users import (
     create_user, get_user_by_email, get_user_by_id, update_user, user_public,
-    consume_email_verify_token,
+    consume_email_verify_token, delete_user,
 )
 from .projects import (
     list_projects, get_project, create_project, update_project,
@@ -348,6 +348,22 @@ def mfa_enable(body: MFAEnableBody, user: dict = Depends(_require_user)):
 def mfa_disable(user: dict = Depends(_require_user)):
     update_user(user["id"], mfa_enabled=False, mfa_secret=None, mfa_secret_pending=None)
     return {"ok": True}
+
+
+class DeleteAccountBody(BaseModel):
+    password: str
+
+
+@app.delete("/api/auth/account")
+def delete_account(body: DeleteAccountBody, user: dict = Depends(_require_user)):
+    """Permanently delete the authenticated user's account and all owned data.
+    Requires current password for confirmation. Session records are kept."""
+    if not verify_password(body.password, user["password_hash"]):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect password")
+    ok = delete_user(user["id"])
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    return {"ok": True, "message": "Account and all owned data deleted."}
 
 
 # --- User field-template routes ---
