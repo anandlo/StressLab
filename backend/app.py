@@ -25,7 +25,7 @@ from .protocol import PROTOCOL_PRESETS, PROTOCOL_REGISTRY
 from .participant import (
     create_participant, get_participant, list_participants, add_session_file,
     update_participant, delete_participant)
-from .logging_utils import save_session, list_sessions, load_session, patch_session_notes, DATA_DIR
+from .logging_utils import save_session, list_sessions, load_session, patch_session_notes, delete_session, DATA_DIR
 from .events import EventMarker
 from .auth import (
     hash_password, verify_password, create_token, decode_token,
@@ -241,6 +241,17 @@ def update_session_notes(filename: str, body: SessionNotesUpdate):
     return {"ok": True} if ok else {"error": "not found"}
 
 
+@app.delete("/api/sessions/{filename}")
+def delete_session_endpoint(filename: str, user: dict = Depends(_require_auth)):
+    """Permanently delete a stored session file. Requires authentication."""
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid filename")
+    ok = delete_session(filename)
+    if not ok:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Session not found")
+    return {"ok": True}
+
+
 # --- Auth routes ---
 
 class RegisterBody(BaseModel):
@@ -362,12 +373,25 @@ def get_me(user: dict = Depends(_require_auth)):
 
 class UpdateProfileBody(BaseModel):
     phone: str | None = None
+    display_name: str | None = None
 
 
 @app.patch("/api/auth/profile")
 def update_profile(body: UpdateProfileBody, user: dict = Depends(_require_auth)):
+    updates: dict = {}
     if body.phone is not None:
-        update_user(user["id"], phone=body.phone.strip() or None)
+        updates["phone"] = body.phone.strip() or None
+    if "display_name" in body.model_fields_set:
+        if body.display_name is None:
+            updates["display_name"] = None
+        else:
+            name = body.display_name.strip()
+            if len(name) > 64:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                    "Display name must be 64 characters or fewer")
+            updates["display_name"] = name or None
+    if updates:
+        update_user(user["id"], **updates)
     return user_public(get_user_by_id(user["id"]))
 
 
@@ -562,6 +586,19 @@ def delete_user_protocol_endpoint(protocol_id: str, user: dict = Depends(_requir
 async def session_websocket(websocket: WebSocket):
     await websocket.accept()
     session: SessionManager | None = None
+    # When a valid JWT is supplied in start_session, results are saved server-side.
+    # Without a token the session runs fully in-memory; the full summary is sent
+    # back to the client so the browser can persist it locally.
+    save_to_server: bool = False
+
+    def _maybe_save(s: SessionManager) -> str | None:
+        """Save session server-side when authenticated. Returns basename or None."""
+        if not save_to_server:
+            return None
+        summ = s.get_summary()
+        filepath = save_session(summ)
+        add_session_file(s.config.participant_id, filepath)
+        return os.path.basename(filepath)
 
     try:
         while True:
@@ -569,6 +606,17 @@ async def session_websocket(websocket: WebSocket):
             msg_type = msg.get("type")
 
             if msg_type == "start_session":
+                # Validate optional auth token to decide persistence mode
+                token_str = msg.get("auth_token")
+                if token_str:
+                    try:
+                        payload = decode_token(token_str)
+                        save_to_server = payload.get("type") == "access"
+                    except Exception:
+                        save_to_server = False
+                else:
+                    save_to_server = False
+
                 config_data = msg.get("config", {})
                 config = SessionConfig(**config_data)
                 session = SessionManager(config)
@@ -578,6 +626,7 @@ async def session_websocket(websocket: WebSocket):
                 await websocket.send_json({
                     "type": "session_started",
                     "score": session.get_score(),
+                    "guest": not save_to_server,
                 })
 
             elif msg_type == "request_trial":
@@ -586,13 +635,13 @@ async def session_websocket(websocket: WebSocket):
                     continue
                 if session.is_time_up():
                     summary = session.get_summary()
-                    filepath = save_session(summary)
-                    add_session_file(session.config.participant_id, filepath)
+                    session_file = _maybe_save(session)
                     event_marker.session_end(session.config.participant_id)
                     await websocket.send_json({
                         "type": "session_complete",
                         "data": summary.model_dump(),
-                        "session_file": os.path.basename(filepath),
+                        "session_file": session_file,
+                        "guest": not save_to_server,
                     })
                     continue
                 if session.should_rest():
@@ -610,13 +659,13 @@ async def session_websocket(websocket: WebSocket):
                 trial = session.next_trial()
                 if trial is None:
                     summary = session.get_summary()
-                    filepath = save_session(summary)
-                    add_session_file(session.config.participant_id, filepath)
+                    session_file = _maybe_save(session)
                     event_marker.session_end(session.config.participant_id)
                     await websocket.send_json({
                         "type": "session_complete",
                         "data": summary.model_dump(),
-                        "session_file": os.path.basename(filepath),
+                        "session_file": session_file,
+                        "guest": not save_to_server,
                     })
                 else:
                     event_marker.trial_start(
@@ -665,20 +714,21 @@ async def session_websocket(websocket: WebSocket):
                 if session is None:
                     continue
                 summary = session.get_summary()
-                filepath = save_session(summary)
-                add_session_file(session.config.participant_id, filepath)
+                session_file = _maybe_save(session)
                 event_marker.session_end(session.config.participant_id)
                 await websocket.send_json({
                     "type": "session_complete",
                     "data": summary.model_dump(),
-                    "session_file": os.path.basename(filepath),
+                    "session_file": session_file,
+                    "guest": not save_to_server,
                 })
                 break
 
     except WebSocketDisconnect:
         if session and session.state.value not in ("complete", "idle"):
-            summary = session.get_summary()
-            save_session(summary)
+            if save_to_server:
+                summary = session.get_summary()
+                save_session(summary)
             event_marker.session_end(session.config.participant_id)
         logger.info("WebSocket disconnected")
 

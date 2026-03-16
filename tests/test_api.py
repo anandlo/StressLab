@@ -301,6 +301,32 @@ class TestSessions:
         body = r.json()
         assert "error" in body
 
+    def test_delete_session_requires_auth(self, client: TestClient):
+        filename = _make_session()
+        r = client.request("DELETE", f"/api/sessions/{filename}")
+        assert r.status_code == 401
+
+    def test_delete_session(self, client: TestClient):
+        filename = _make_session()
+        headers = _register_login(client)
+        r = client.request("DELETE", f"/api/sessions/{filename}", headers=headers)
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+        # Confirm it is gone
+        r2 = client.get(f"/api/sessions/{filename}")
+        assert "error" in r2.json()
+
+    def test_delete_nonexistent_session(self, client: TestClient):
+        headers = _register_login(client)
+        r = client.request("DELETE", "/api/sessions/ghost_xyz_999.json",
+                           headers=headers)
+        assert r.status_code == 404
+
+    def test_delete_session_path_traversal_blocked(self, client: TestClient):
+        headers = _register_login(client)
+        r = client.request("DELETE", "/api/sessions/..evil", headers=headers)
+        assert r.status_code == 422
+
 
 # ── Practice trials ───────────────────────────────────────────────────────────
 
@@ -628,6 +654,37 @@ class TestAuthEdgeCases:
     def test_update_profile_requires_auth(self, client: TestClient):
         r = client.patch("/api/auth/profile", json={"phone": "123"})
         assert r.status_code == 401
+
+    def test_update_display_name(self, client: TestClient):
+        _, token = self._register_login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        r = client.patch("/api/auth/profile",
+                         json={"display_name": "Dr. Smith"},
+                         headers=headers)
+        assert r.status_code == 200
+        assert r.json()["display_name"] == "Dr. Smith"
+        # Persisted: re-fetch via /me
+        me = client.get("/api/auth/me", headers=headers).json()
+        assert me["display_name"] == "Dr. Smith"
+
+    def test_display_name_too_long_rejected(self, client: TestClient):
+        _, token = self._register_login(client)
+        r = client.patch("/api/auth/profile",
+                         json={"display_name": "x" * 65},
+                         headers={"Authorization": f"Bearer {token}"})
+        assert r.status_code == 422
+
+    def test_display_name_null_clears_value(self, client: TestClient):
+        _, token = self._register_login(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        client.patch("/api/auth/profile",
+                     json={"display_name": "Temp Name"},
+                     headers=headers)
+        r = client.patch("/api/auth/profile",
+                         json={"display_name": None},
+                         headers=headers)
+        assert r.status_code == 200
+        assert r.json()["display_name"] is None
 
 
 # ── Rate limiting — register and resend ───────────────────────────────────────

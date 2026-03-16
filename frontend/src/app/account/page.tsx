@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CheckCircle2, AlertCircle, Shield, ShieldOff, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { UserAvatar } from "@/components/user-avatar";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -42,6 +43,7 @@ export default function AccountPage() {
 
   // Profile
   const [phone, setPhone] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Change password
@@ -69,6 +71,7 @@ export default function AccountPage() {
     }
     if (user) {
       setPhone(user.phone ?? "");
+      setDisplayName(user.display_name ?? "");
     }
   }, [user, loading, router]);
 
@@ -81,7 +84,7 @@ export default function AccountPage() {
     if (!token) return;
     setSavingProfile(true);
     try {
-      await updateProfile(token, phone.trim() || null);
+      await updateProfile(token, phone.trim() || null, displayName.trim() || null);
       await refreshUser();
       toast.success("Profile updated");
     } catch (err) {
@@ -215,6 +218,16 @@ export default function AccountPage() {
           <CardDescription>Your email address and contact information.</CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Avatar preview */}
+          <div className="flex items-center gap-4 mb-6 p-4 rounded-lg bg-muted/40">
+            <UserAvatar name={displayName.trim() || user.email} size={64} />
+            <div>
+              <p className="text-sm font-medium">{displayName.trim() || user.email.split("@")[0]}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Avatar generated from your display name — no photo storage.
+              </p>
+            </div>
+          </div>
           <form onSubmit={handleSaveProfile} className="space-y-4">
             <div className="space-y-1">
               <Label>Email</Label>
@@ -244,6 +257,19 @@ export default function AccountPage() {
                   {resending ? "Sending…" : "Resend verification email"}
                 </Button>
               )}
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="display-name">Display name (optional)</Label>
+              <Input
+                id="display-name"
+                type="text"
+                autoComplete="nickname"
+                placeholder="Your name"
+                maxLength={64}
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">Shown in the sidebar. Defaults to your email prefix.</p>
             </div>
             <div className="space-y-1">
               <Label htmlFor="phone">Phone (optional)</Label>

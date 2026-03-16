@@ -3,6 +3,7 @@
 import { useState, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import {
   Target,
   Clock,
@@ -13,6 +14,7 @@ import {
   ChevronRight,
   Info,
   Check,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -60,8 +62,10 @@ import {
   ReferenceLine,
 } from "recharts";
 import { useSessions, useSession } from "@/hooks/use-queries";
+import { useQueryClient } from "@tanstack/react-query";
 import type { SessionSummary } from "@/lib/types";
-import { downloadSessionCSV, patchSessionNotes } from "@/lib/api";
+import { downloadSessionCSV, patchSessionNotes, deleteSession } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 
@@ -69,6 +73,9 @@ function ResultsContent() {
   const searchParams = useSearchParams();
   const summaryParam = searchParams.get("summary");
   const sessionParam = searchParams.get("session");
+
+  const { token } = useAuth();
+  const queryClient = useQueryClient();
 
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const { data: sessionList } = useSessions();
@@ -85,6 +92,19 @@ function ResultsContent() {
   const [filterIntensity, setFilterIntensity] = useState<"all" | "low" | "medium" | "high">("all");
   const [sortBy, setSortBy] = useState<"date" | "accuracy" | "trials">("date");
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+
+  async function handleDeleteSession(filename: string) {
+    if (!token) return;
+    if (!window.confirm(`Delete session "${filename}"? This cannot be undone.`)) return;
+    try {
+      await deleteSession(token, filename);
+      if (selectedFile === filename) setSelectedFile(null);
+      queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      toast.success("Session deleted");
+    } catch {
+      toast.error("Failed to delete session");
+    }
+  }
 
   // Either from URL param (just-completed session) or loaded from API
   const summary: SessionSummary | null = useMemo(() => {
@@ -305,28 +325,41 @@ function ResultsContent() {
               {filtered.length === 0 ? (
                 <div className="py-12 text-center text-sm text-muted-foreground">No sessions match the current filter.</div>
               ) : filtered.map((s) => (
-                <button
+                <div
                   key={s.filename}
-                  className="w-full text-left flex items-center justify-between gap-4 px-5 py-4 hover:bg-muted/40 transition-colors"
-                  onClick={() => setSelectedFile(s.filename)}
+                  className="flex items-center hover:bg-muted/40 transition-colors"
                 >
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium">{s.participant_id}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {new Date(s.session_start).toLocaleString()}
+                  <button
+                    className="flex-1 text-left flex items-center justify-between gap-4 px-5 py-4"
+                    onClick={() => setSelectedFile(s.filename)}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium">{s.participant_id}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {new Date(s.session_start).toLocaleString()}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-4 shrink-0">
-                    <Badge variant="secondary" className="tabular-nums">
-                      {s.accuracy_pct?.toFixed(0)}% accuracy
-                    </Badge>
-                    <Badge variant="outline">{s.total_tasks} trials</Badge>
-                    <Badge variant="outline" className="capitalize">
-                      {s.intensity}
-                    </Badge>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </button>
+                    <div className="flex items-center gap-4 shrink-0">
+                      <Badge variant="secondary" className="tabular-nums">
+                        {s.accuracy_pct?.toFixed(0)}% accuracy
+                      </Badge>
+                      <Badge variant="outline">{s.total_tasks} trials</Badge>
+                      <Badge variant="outline" className="capitalize">
+                        {s.intensity}
+                      </Badge>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </button>
+                  {token && (
+                    <button
+                      className="mr-4 p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      title="Delete session"
+                      onClick={() => handleDeleteSession(s.filename)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           </>

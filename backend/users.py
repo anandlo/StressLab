@@ -16,7 +16,7 @@ USERS_FILE = os.path.join(DATA_DIR, "users.json")
 # Whitelist prevents callers from setting arbitrary column names in the dynamic
 # UPDATE query, which would be a SQL injection vector.
 _ALLOWED_USER_FIELDS = {
-    "phone", "password_hash", "email_verified", "email_verify_token",
+    "phone", "display_name", "password_hash", "email_verified", "email_verify_token",
     "mfa_enabled", "mfa_secret", "mfa_secret_pending", "field_templates",
 }
 
@@ -76,6 +76,7 @@ def create_user(email: str, password_hash: str, phone: str | None = None) -> dic
         "id": user_id,
         "email": email.strip().lower(),
         "phone": phone or None,
+        "display_name": None,
         "password_hash": password_hash,
         "email_verified": False,
         "email_verify_token": verify_token,
@@ -88,11 +89,11 @@ def create_user(email: str, password_hash: str, phone: str | None = None) -> dic
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    """INSERT INTO users (id, email, phone, password_hash,
+                    """INSERT INTO users (id, email, phone, display_name, password_hash,
                        email_verified, email_verify_token, mfa_enabled, mfa_secret, created)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                    (user["id"], user["email"], user["phone"], user["password_hash"],
-                     user["email_verified"], user["email_verify_token"],
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (user["id"], user["email"], user["phone"], user["display_name"],
+                     user["password_hash"], user["email_verified"], user["email_verify_token"],
                      user["mfa_enabled"], user["mfa_secret"], user["created"])
                 )
             conn.commit()
@@ -136,7 +137,7 @@ def update_user(user_id: str, **kwargs) -> dict | None:
 
 def user_public(user: dict) -> dict:
     """Return only the fields safe to send to the client."""
-    return {k: user[k] for k in ("id", "email", "phone", "mfa_enabled", "email_verified", "created")}
+    return {k: user.get(k) for k in ("id", "email", "phone", "display_name", "mfa_enabled", "email_verified", "created")}
 
 
 def consume_email_verify_token(token: str) -> bool:

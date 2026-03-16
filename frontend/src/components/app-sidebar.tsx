@@ -12,9 +12,7 @@ import {
   FolderOpen,
   LogIn,
   LogOut,
-  ShieldCheck,
   LifeBuoy,
-  User,
 } from "lucide-react";
 import {
   Sidebar,
@@ -22,7 +20,6 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -32,6 +29,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { UserAvatar } from "@/components/user-avatar";
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -104,11 +102,16 @@ export function AppSidebar() {
           <div className="flex flex-col gap-2">
             <Link
               href="/account"
-              className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:border-primary/60 hover:text-foreground transition-colors"
+              className="flex items-center gap-2.5 rounded-md border px-3 py-2 text-sm hover:border-primary/60 hover:text-foreground transition-colors"
             >
-              <User className="h-4 w-4 shrink-0 text-primary" />
+              <UserAvatar name={user.display_name ?? user.email} size={28} />
               <div className="flex flex-col min-w-0">
-                <span className="text-[12px] font-medium leading-tight truncate">{user.email}</span>
+                <span className="text-[12px] font-medium leading-tight truncate">
+                  {user.display_name ?? user.email.split("@")[0]}
+                </span>
+                <span className="text-[10px] text-muted-foreground leading-tight truncate">
+                  {user.email}
+                </span>
                 {!user.email_verified && (
                   <span className="text-[10px] text-amber-500 leading-tight">Email unverified</span>
                 )}
@@ -125,13 +128,25 @@ export function AppSidebar() {
             </Button>
           </div>
         ) : (
-          <Link
-            href="/login"
-            className="flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 px-3 py-2 text-sm text-muted-foreground hover:border-primary/60 hover:text-foreground transition-colors"
-          >
-            <LogIn className="h-4 w-4 shrink-0" />
-            <span className="text-[12px] font-medium leading-tight">Sign in</span>
-          </Link>
+          <div className="flex flex-col gap-1.5">
+            <div className="rounded-md border border-dashed px-3 py-2.5 space-y-1">
+              <p className="text-[11px] font-medium text-foreground/70">Guest mode</p>
+              <p className="text-[10px] text-muted-foreground leading-snug">
+                Session data stays on your device.{" "}
+                <Link href="/register" className="underline underline-offset-2 hover:text-foreground transition-colors">
+                  Create an account
+                </Link>{" "}
+                to save to cloud.
+              </p>
+            </div>
+            <Link
+              href="/login"
+              className="flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 px-3 py-2 text-sm text-muted-foreground hover:border-primary/60 hover:text-foreground transition-colors"
+            >
+              <LogIn className="h-4 w-4 shrink-0" />
+              <span className="text-[12px] font-medium leading-tight">Sign in</span>
+            </Link>
+          </div>
         )}
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-muted-foreground/60">v2.0</span>

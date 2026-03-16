@@ -81,6 +81,7 @@ def init_db() -> None:
             cur.execute("""
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_secret_pending TEXT;
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS field_templates JSONB DEFAULT '[]';
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
             """)
         conn.commit()
     finally:

@@ -158,25 +158,26 @@ export interface SessionListItem {
 
 // WebSocket message types
 export type WSOutgoingMessage =
-  | { type: "start_session"; config: SessionConfig }
+  | { type: "start_session"; config: SessionConfig; auth_token?: string }
   | { type: "request_trial" }
   | { type: "submit_response"; trial_id: string; response: string; response_time_ms: number; timed_out: boolean }
   | { type: "rest_complete" }
   | { type: "stop_session" };
 
 export type WSIncomingMessage =
-  | { type: "session_started"; score: SessionScore }
+  | { type: "session_started"; score: SessionScore; guest?: boolean }
   | { type: "trial"; data: Trial }
   | { type: "result"; data: { correct: boolean; correct_answer: string; user_response: string; timed_out: boolean; response_time_ms: number; score: SessionScore; feedback: string | null } }
   | { type: "rest"; data: { duration_sec: number; block_completed: number; total_blocks: number } }
   | { type: "rest_ended"; score: SessionScore }
-  | { type: "session_complete"; data: SessionSummary; session_file: string }
+  | { type: "session_complete"; data: SessionSummary; session_file: string | null; guest?: boolean }
   | { type: "error"; message: string };
 
 export interface User {
   id: string;
   email: string;
   phone: string | null;
+  display_name: string | null;
   mfa_enabled: boolean;
   email_verified: boolean;
   created: string;

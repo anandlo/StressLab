@@ -103,6 +103,29 @@ def load_session(filename: str) -> dict | None:
     return None
 
 
+def delete_session(filename: str) -> bool:
+    """Delete a stored session. Returns True if it existed and was deleted."""
+    _db = _get_db()
+    if _db.DATABASE_URL:
+        conn = _db.get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM sessions WHERE filename = %s RETURNING filename",
+                    (filename,)
+                )
+                deleted = cur.fetchone()
+            conn.commit()
+            return deleted is not None
+        finally:
+            conn.close()
+    filepath = os.path.join(DATA_DIR, filename)
+    if os.path.isfile(filepath):
+        os.remove(filepath)
+        return True
+    return False
+
+
 def patch_session_notes(filename: str, notes: str) -> bool:
     """Update the notes field on a stored session. Returns True if found."""
     _db = _get_db()

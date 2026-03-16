@@ -155,7 +155,12 @@ export function useSessionWS(): UseSessionReturn {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
           clearInterval(check);
           setState(SessionState.RUNNING);
-          send({ type: "start_session", config });
+          // Include the JWT so the backend knows whether to persist the session
+          // server-side. Guests (no token) run fully in-memory.
+          const token = typeof window !== "undefined"
+            ? (localStorage.getItem("stresslab_token") ?? undefined)
+            : undefined;
+          send({ type: "start_session", config, ...(token ? { auth_token: token } : {}) });
         }
       }, 50);
       // Timeout after 5s -- surface error so the user isn't silently stuck

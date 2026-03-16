@@ -164,11 +164,19 @@ export function changePassword(
 export function updateProfile(
   token: string,
   phone: string | null,
+  displayName: string | null,
 ): Promise<User> {
   return fetchJSON("/api/auth/profile", {
     method: "PATCH",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ phone }),
+    body: JSON.stringify({ phone, display_name: displayName }),
+  });
+}
+
+export function deleteSession(token: string, filename: string): Promise<{ ok: boolean }> {
+  return fetchJSON(`/api/sessions/${encodeURIComponent(filename)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
   });
 }
 
