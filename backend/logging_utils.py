@@ -47,33 +47,25 @@ def save_session(summary: SessionSummary, owner_id: str | None = None) -> str:
 
 
 def list_sessions(participant_id: str | None = None, owner_id: str | None = None) -> list[dict]:
+    # owner_id is required; without it we cannot enforce isolation.
+    if not owner_id:
+        return []
     _db = _get_db()
     if _db.DATABASE_URL:
         conn = _db.get_conn()
         try:
             with conn.cursor() as cur:
-                if participant_id and owner_id:
+                if participant_id:
                     cur.execute(
                         "SELECT filename, participant_id, session_start, total_tasks, accuracy_pct, intensity"
                         " FROM sessions WHERE participant_id = %s AND owner_id = %s ORDER BY created",
                         (participant_id, owner_id)
                     )
-                elif participant_id:
-                    cur.execute(
-                        "SELECT filename, participant_id, session_start, total_tasks, accuracy_pct, intensity"
-                        " FROM sessions WHERE participant_id = %s ORDER BY created",
-                        (participant_id,)
-                    )
-                elif owner_id:
+                else:
                     cur.execute(
                         "SELECT filename, participant_id, session_start, total_tasks, accuracy_pct, intensity"
                         " FROM sessions WHERE owner_id = %s ORDER BY created",
                         (owner_id,)
-                    )
-                else:
-                    cur.execute(
-                        "SELECT filename, participant_id, session_start, total_tasks, accuracy_pct, intensity"
-                        " FROM sessions ORDER BY created"
                     )
                 return [dict(r) for r in cur.fetchall()]
         finally:
@@ -89,9 +81,8 @@ def list_sessions(participant_id: str | None = None, owner_id: str | None = None
         filepath = os.path.join(DATA_DIR, fname)
         with open(filepath) as f:
             data = json.load(f)
-        # Enforce ownership: skip sessions owned by a different user
-        file_owner = data.get("_owner_id")
-        if owner_id and file_owner and file_owner != owner_id:
+        # Strict ownership: only return sessions that belong to this user.
+        if data.get("_owner_id") != owner_id:
             continue
         sessions.append({
             "filename": fname,
@@ -105,18 +96,17 @@ def list_sessions(participant_id: str | None = None, owner_id: str | None = None
 
 
 def load_session(filename: str, owner_id: str | None = None) -> dict | None:
+    if not owner_id:
+        return None
     _db = _get_db()
     if _db.DATABASE_URL:
         conn = _db.get_conn()
         try:
             with conn.cursor() as cur:
-                if owner_id:
-                    cur.execute(
-                        "SELECT data FROM sessions WHERE filename = %s AND owner_id = %s",
-                        (filename, owner_id)
-                    )
-                else:
-                    cur.execute("SELECT data FROM sessions WHERE filename = %s", (filename,))
+                cur.execute(
+                    "SELECT data FROM sessions WHERE filename = %s AND owner_id = %s",
+                    (filename, owner_id)
+                )
                 row = cur.fetchone()
                 return row["data"] if row else None
         finally:
@@ -125,9 +115,7 @@ def load_session(filename: str, owner_id: str | None = None) -> dict | None:
     if os.path.exists(filepath):
         with open(filepath) as f:
             data = json.load(f)
-        # Enforce ownership for files that have an owner recorded
-        file_owner = data.get("_owner_id")
-        if owner_id and file_owner and file_owner != owner_id:
+        if data.get("_owner_id") != owner_id:
             return None
         return data
     return None
@@ -135,21 +123,17 @@ def load_session(filename: str, owner_id: str | None = None) -> dict | None:
 
 def delete_session(filename: str, owner_id: str | None = None) -> bool:
     """Delete a stored session. Returns True if it existed and was deleted."""
+    if not owner_id:
+        return False
     _db = _get_db()
     if _db.DATABASE_URL:
         conn = _db.get_conn()
         try:
             with conn.cursor() as cur:
-                if owner_id:
-                    cur.execute(
-                        "DELETE FROM sessions WHERE filename = %s AND owner_id = %s RETURNING filename",
-                        (filename, owner_id)
-                    )
-                else:
-                    cur.execute(
-                        "DELETE FROM sessions WHERE filename = %s RETURNING filename",
-                        (filename,)
-                    )
+                cur.execute(
+                    "DELETE FROM sessions WHERE filename = %s AND owner_id = %s RETURNING filename",
+                    (filename, owner_id)
+                )
                 deleted = cur.fetchone()
             conn.commit()
             return deleted is not None
@@ -157,12 +141,10 @@ def delete_session(filename: str, owner_id: str | None = None) -> bool:
             conn.close()
     filepath = os.path.join(DATA_DIR, filename)
     if os.path.isfile(filepath):
-        if owner_id:
-            with open(filepath) as f:
-                data = json.load(f)
-            file_owner = data.get("_owner_id")
-            if file_owner and file_owner != owner_id:
-                return False
+        with open(filepath) as f:
+            data = json.load(f)
+        if data.get("_owner_id") != owner_id:
+            return False
         os.remove(filepath)
         return True
     return False
@@ -170,21 +152,17 @@ def delete_session(filename: str, owner_id: str | None = None) -> bool:
 
 def patch_session_notes(filename: str, notes: str, owner_id: str | None = None) -> bool:
     """Update the notes field on a stored session. Returns True if found."""
+    if not owner_id:
+        return False
     _db = _get_db()
     if _db.DATABASE_URL:
         conn = _db.get_conn()
         try:
             with conn.cursor() as cur:
-                if owner_id:
-                    cur.execute(
-                        "UPDATE sessions SET data = data || %s::jsonb WHERE filename = %s AND owner_id = %s RETURNING filename",
-                        (json.dumps({"notes": notes}), filename, owner_id)
-                    )
-                else:
-                    cur.execute(
-                        "UPDATE sessions SET data = data || %s::jsonb WHERE filename = %s RETURNING filename",
-                        (json.dumps({"notes": notes}), filename)
-                    )
+                cur.execute(
+                    "UPDATE sessions SET data = data || %s::jsonb WHERE filename = %s AND owner_id = %s RETURNING filename",
+                    (json.dumps({"notes": notes}), filename, owner_id)
+                )
                 updated = cur.fetchone()
             conn.commit()
             return updated is not None
@@ -195,10 +173,8 @@ def patch_session_notes(filename: str, notes: str, owner_id: str | None = None) 
         return False
     with open(filepath) as f:
         data = json.load(f)
-    if owner_id:
-        file_owner = data.get("_owner_id")
-        if file_owner and file_owner != owner_id:
-            return False
+    if data.get("_owner_id") != owner_id:
+        return False
     data["notes"] = notes
     with open(filepath, "w") as f:
         json.dump(data, f, indent=2, default=str)

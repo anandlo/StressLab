@@ -25,7 +25,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { ThemeToggle } from "@/components/theme-toggle";
+
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -150,7 +150,7 @@ export function AppSidebar() {
         )}
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-muted-foreground/60">v2.0</span>
-          <ThemeToggle />
+
         </div>
       </SidebarFooter>
     </Sidebar>
