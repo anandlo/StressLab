@@ -27,18 +27,19 @@ export function useParticipants() {
   });
 }
 
-export function useSessions(participantId?: string) {
+export function useSessions(token: string | null, participantId?: string) {
   return useQuery({
-    queryKey: ["sessions", participantId],
-    queryFn: () => listSessions(participantId),
+    queryKey: ["sessions", participantId, !!token],
+    queryFn: () => listSessions(token!, participantId),
     staleTime: 10_000,
+    enabled: !!token,
   });
 }
 
-export function useSession(filename: string | null) {
+export function useSession(token: string | null, filename: string | null) {
   return useQuery({
     queryKey: ["session", filename],
-    queryFn: () => getSession(filename!),
-    enabled: !!filename,
+    queryFn: () => getSession(token!, filename!),
+    enabled: !!filename && !!token,
   });
 }

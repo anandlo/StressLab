@@ -44,7 +44,7 @@ export default function ProjectsPage() {
 
   const refresh = useCallback(async () => {
     try {
-      const [p, s] = await Promise.all([listProjects(token ?? ""), listSessions()]);
+      const [p, s] = await Promise.all([listProjects(token ?? ""), listSessions(token ?? "")]);
       setProjects(p);
       setSessions(s);
     } catch (err) {

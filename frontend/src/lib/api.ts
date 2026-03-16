@@ -41,13 +41,17 @@ export function getParticipant(id: string): Promise<Participant> {
   return fetchJSON(`/api/participants/${encodeURIComponent(id)}`);
 }
 
-export function listSessions(participantId?: string): Promise<SessionListItem[]> {
+export function listSessions(token: string, participantId?: string): Promise<SessionListItem[]> {
   const params = participantId ? `?participant_id=${encodeURIComponent(participantId)}` : "";
-  return fetchJSON(`/api/sessions${params}`);
+  return fetchJSON(`/api/sessions${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }
 
-export function getSession(filename: string): Promise<SessionSummary> {
-  return fetchJSON(`/api/sessions/${encodeURIComponent(filename)}`);
+export function getSession(token: string, filename: string): Promise<SessionSummary> {
+  return fetchJSON(`/api/sessions/${encodeURIComponent(filename)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }
 
 export function generatePracticeTrials(paradigmIds: string[]): Promise<Trial[]> {
@@ -62,17 +66,29 @@ export function deleteParticipant(id: string): Promise<{ ok: boolean }> {
   return fetchJSON(`/api/participants/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export function downloadSessionCSV(filename: string): void {
-  const a = document.createElement("a");
-  a.href = `/api/sessions/${encodeURIComponent(filename)}/csv`;
-  a.download = filename.replace(".json", ".csv");
-  a.click();
+export function downloadSessionCSV(token: string, filename: string): void {
+  fetch(`${BASE}/api/sessions/${encodeURIComponent(filename)}/csv`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then((res) => {
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.blob();
+    })
+    .then((blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename.replace(".json", ".csv");
+      a.click();
+      URL.revokeObjectURL(url);
+    })
+    .catch(() => {/* caller handles via toast */});
 }
 
-export function patchSessionNotes(filename: string, notes: string): Promise<{ ok: boolean }> {
+export function patchSessionNotes(token: string, filename: string, notes: string): Promise<{ ok: boolean }> {
   return fetchJSON(`/api/sessions/${encodeURIComponent(filename)}/notes`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ notes }),
   });
 }

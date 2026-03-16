@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useParticipants, useSessions, useParadigms, useProtocols } from "@/hooks/use-queries";
+import { useAuth } from "@/lib/auth";
 
 const container = {
   hidden: { opacity: 0 },
@@ -35,8 +36,9 @@ const item = {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { token } = useAuth();
   const { data: participants } = useParticipants();
-  const { data: sessions } = useSessions();
+  const { data: sessions } = useSessions(token, undefined);
   const { data: paradigms } = useParadigms();
   const { data: protocols } = useProtocols();
 

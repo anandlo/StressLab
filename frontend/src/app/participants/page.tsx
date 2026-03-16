@@ -418,7 +418,8 @@ function ParticipantDetailSheet({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { data: sessions } = useSessions(participant?.id);
+  const { token } = useAuth();
+  const { data: sessions } = useSessions(token, participant?.id);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 

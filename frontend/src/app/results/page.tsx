@@ -69,6 +69,29 @@ import { useAuth } from "@/lib/auth";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 
+function CustomChartTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ name: string; value: number | string }>;
+  label?: string | number;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-md border bg-popover px-3 py-2 text-popover-foreground shadow-md text-xs">
+      {label !== undefined && <p className="font-medium mb-1">{label}</p>}
+      {payload.map((p) => (
+        <p key={p.name}>
+          {p.name}:{" "}
+          {typeof p.value === "number" ? p.value.toFixed(1) : p.value}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function ResultsContent() {
   const searchParams = useSearchParams();
   const summaryParam = searchParams.get("summary");
@@ -78,8 +101,8 @@ function ResultsContent() {
   const queryClient = useQueryClient();
 
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const { data: sessionList } = useSessions();
-  const { data: loadedSession } = useSession(selectedFile);
+  const { data: sessionList } = useSessions(token, undefined);
+  const { data: loadedSession } = useSession(token, selectedFile);
   const csvFilename = selectedFile ?? sessionParam;
 
   const [exportOpen, setExportOpen] = useState(false);
@@ -470,13 +493,14 @@ function ResultsContent() {
                           fontSize={12}
                           tickLine={false}
                         />
-                        <ChartTooltip />
+                        <ChartTooltip content={<CustomChartTooltip />} />
                         <Line
                           type="monotone"
                           dataKey="accuracy"
                           stroke="var(--color-primary)"
                           strokeWidth={2}
                           dot={false}
+                          activeDot={{ r: 4, strokeWidth: 0 }}
                         />
                       </LineChart>
                     </ResponsiveContainer>
@@ -507,13 +531,14 @@ function ResultsContent() {
                           tickLine={false}
                         />
                         <YAxis fontSize={12} tickLine={false} />
-                        <ChartTooltip />
+                        <ChartTooltip content={<CustomChartTooltip />} />
                         <Line
                           type="monotone"
                           dataKey="rt"
                           stroke="var(--color-chart-2)"
                           strokeWidth={2}
                           dot={false}
+                          activeDot={{ r: 4, strokeWidth: 0 }}
                         />
                       </LineChart>
                     </ResponsiveContainer>
@@ -547,7 +572,7 @@ function ResultsContent() {
                           width={110}
                           tickLine={false}
                         />
-                        <ChartTooltip />
+                        <ChartTooltip content={<CustomChartTooltip />} />
                         <Bar
                           dataKey="accuracy"
                           fill="var(--color-primary)"
@@ -706,7 +731,7 @@ function ResultsContent() {
                         <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                         <XAxis dataKey="rt" fontSize={10} angle={-40} textAnchor="end" interval={1} />
                         <YAxis fontSize={11} tickLine={false} />
-                        <ChartTooltip />
+                        <ChartTooltip content={<CustomChartTooltip />} />
                         <Bar dataKey="count" fill="var(--color-primary)" radius={[3, 3, 0, 0]} name="Trials" />
                       </BarChart>
                     </ResponsiveContainer>
@@ -733,7 +758,7 @@ function ResultsContent() {
                         <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                         <XAxis dataKey="quarter" fontSize={12} />
                         <YAxis domain={[0, 100]} fontSize={12} tickLine={false} />
-                        <ChartTooltip formatter={(v) => [`${v}%`, "Accuracy"]} />
+                        <ChartTooltip content={<CustomChartTooltip />} />
                         <ReferenceLine y={50} stroke="var(--color-muted-foreground)" strokeDasharray="4 4" opacity={0.5} />
                         <Bar dataKey="accuracy" radius={[4, 4, 0, 0]} name="Accuracy (%)">
                           {quartileData.map((entry, i) => (
@@ -775,7 +800,7 @@ function ResultsContent() {
                               if (!payload?.length) return null;
                               const d = payload[0]?.payload as { name: string; avgRT: number; accuracy: number; total: number };
                               return (
-                                <div className="rounded border bg-popover px-3 py-2 text-xs shadow-md">
+                                <div className="rounded border bg-popover px-3 py-2 text-popover-foreground text-xs shadow-md">
                                   <div className="font-medium">{d.name}</div>
                                   <div>Avg Response Time: {d.avgRT} ms</div>
                                   <div>Accuracy: {d.accuracy}%</div>
@@ -915,8 +940,8 @@ function ResultsContent() {
               onClick={() => {
                 if (!summary) return;
                 const base = `session_${summary.participant_id}_${summary.session_start.slice(0, 10)}`;
-                if (exportTrials && csvFilename) {
-                  downloadSessionCSV(csvFilename);
+                if (exportTrials && csvFilename && token) {
+                  downloadSessionCSV(token, csvFilename);
                 }
                 if (exportSummary) {
                   const rows = [
@@ -950,13 +975,15 @@ function ResultsContent() {
 }
 
 function NotesField({ filename, initialNotes }: { filename: string; initialNotes: string }) {
+  const { token } = useAuth();
   const [notes, setNotes] = useState(initialNotes);
   const [saving, setSaving] = useState(false);
 
   async function handleBlur() {
+    if (!token) return;
     setSaving(true);
     try {
-      await patchSessionNotes(filename, notes);
+      await patchSessionNotes(token, filename, notes);
     } catch {
       // notes are non-critical; silent fail
     } finally {
