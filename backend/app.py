@@ -200,14 +200,14 @@ def list_sessions_endpoint(
     participant_id: str | None = None,
     user: dict = Depends(_require_auth),
 ):
-    return list_sessions(participant_id)
+    return list_sessions(participant_id, owner_id=user["id"])
 
 
 @app.get("/api/sessions/{filename}")
 def get_session_endpoint(filename: str, user: dict = Depends(_require_auth)):
     if "/" in filename or "\\" in filename or ".." in filename:
         return {"error": "invalid filename"}
-    data = load_session(filename)
+    data = load_session(filename, owner_id=user["id"])
     if data is None:
         return {"error": "not found"}
     return data
@@ -217,7 +217,7 @@ def get_session_endpoint(filename: str, user: dict = Depends(_require_auth)):
 def export_session_csv(filename: str, user: dict = Depends(_require_auth)):
     if "/" in filename or "\\" in filename or ".." in filename:
         return {"error": "invalid filename"}
-    data = load_session(filename)
+    data = load_session(filename, owner_id=user["id"])
     if data is None:
         return {"error": "not found"}
     trials = data.get("trials", [])
@@ -249,7 +249,7 @@ def update_session_notes(
 ):
     if "/" in filename or "\\" in filename or ".." in filename:
         return {"error": "invalid filename"}
-    ok = patch_session_notes(filename, body.notes)
+    ok = patch_session_notes(filename, body.notes, owner_id=user["id"])
     return {"ok": True} if ok else {"error": "not found"}
 
 
@@ -258,7 +258,7 @@ def delete_session_endpoint(filename: str, user: dict = Depends(_require_auth)):
     """Permanently delete a stored session file. Requires authentication."""
     if "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid filename")
-    ok = delete_session(filename)
+    ok = delete_session(filename, owner_id=user["id"])
     if not ok:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Session not found")
     return {"ok": True}
@@ -602,13 +602,14 @@ async def session_websocket(websocket: WebSocket):
     # Without a token the session runs fully in-memory; the full summary is sent
     # back to the client so the browser can persist it locally.
     save_to_server: bool = False
+    owner_id: str | None = None
 
     def _maybe_save(s: SessionManager) -> str | None:
         """Save session server-side when authenticated. Returns basename or None."""
         if not save_to_server:
             return None
         summ = s.get_summary()
-        filepath = save_session(summ)
+        filepath = save_session(summ, owner_id)
         add_session_file(s.config.participant_id, filepath)
         return os.path.basename(filepath)
 
@@ -624,10 +625,13 @@ async def session_websocket(websocket: WebSocket):
                     try:
                         payload = decode_token(token_str)
                         save_to_server = payload.get("type") == "access"
+                        owner_id = payload.get("sub") if save_to_server else None
                     except Exception:
                         save_to_server = False
+                        owner_id = None
                 else:
                     save_to_server = False
+                    owner_id = None
 
                 config_data = msg.get("config", {})
                 config = SessionConfig(**config_data)
@@ -740,7 +744,7 @@ async def session_websocket(websocket: WebSocket):
         if session and session.state.value not in ("complete", "idle"):
             if save_to_server:
                 summary = session.get_summary()
-                save_session(summary)
+                save_session(summary, owner_id)
             event_marker.session_end(session.config.participant_id)
         logger.info("WebSocket disconnected")
 
