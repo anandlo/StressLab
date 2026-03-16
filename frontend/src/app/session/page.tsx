@@ -154,10 +154,17 @@ function SessionContent() {
       // Authenticated: session is saved server-side, navigate by filename only.
       router.push(`/results?session=${encodeURIComponent(sessionFile)}`);
     } else {
-      // Guest: store in sessionStorage so the data never leaves this browser
-      // (avoids iCloud tab sync leaking the summary to other devices).
-      sessionStorage.setItem("stresslab_guest_session", JSON.stringify(summary));
-      router.push("/results?guest=1");
+      // Guest: persist in localStorage so sessions survive page navigation
+      // and appear in the session list. Each session gets a unique id.
+      const id = `guest_${Date.now()}`;
+      const existing: Array<{ id: string; data: typeof summary }> = (() => {
+        try {
+          return JSON.parse(localStorage.getItem("stresslab_guest_sessions") ?? "[]");
+        } catch { return []; }
+      })();
+      existing.push({ id, data: summary });
+      localStorage.setItem("stresslab_guest_sessions", JSON.stringify(existing));
+      router.push(`/results?guest=${encodeURIComponent(id)}`);
     }
     return null;
   }
@@ -315,8 +322,8 @@ function SessionContent() {
                   animate={{ opacity: 1 }}
                   className={`text-center py-2 rounded-md text-sm font-medium ${
                     lastResult.is_correct
-                      ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                      : "bg-red-500/10 text-red-600 dark:text-red-400"
+                      ? "bg-green-500/10 text-green-600"
+                      : "bg-red-500/10 text-red-600"
                   }`}
                 >
                   {lastResult.is_correct

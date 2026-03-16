@@ -117,6 +117,28 @@ function ResultsContent() {
   const [sortBy, setSortBy] = useState<"date" | "accuracy" | "trials">("date");
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
 
+  // Guest sessions stored locally
+  type GuestEntry = { id: string; data: SessionSummary };
+  const [guestEntries, setGuestEntries] = useState<GuestEntry[]>([]);
+  const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
+
+  // Load guest sessions from localStorage on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("stresslab_guest_sessions");
+      if (raw) setGuestEntries(JSON.parse(raw));
+    } catch { /* ignore */ }
+  }, []);
+
+  function handleDeleteGuestSession(id: string) {
+    if (!window.confirm("Delete this guest session? This cannot be undone.")) return;
+    const updated = guestEntries.filter((e) => e.id !== id);
+    setGuestEntries(updated);
+    localStorage.setItem("stresslab_guest_sessions", JSON.stringify(updated));
+    if (selectedGuestId === id) setSelectedGuestId(null);
+    toast.success("Session deleted");
+  }
+
   async function handleDeleteSession(filename: string) {
     if (!token) return;
     if (!window.confirm(`Delete session "${filename}"? This cannot be undone.`)) return;
@@ -130,20 +152,15 @@ function ResultsContent() {
     }
   }
 
-  // Guest session: read once from sessionStorage then clear it so the
-  // data does not persist beyond this page view.
-  const [guestSummary, setGuestSummary] = useState<SessionSummary | null>(null);
-  useEffect(() => {
-    if (guestParam === "1") {
-      const raw = sessionStorage.getItem("stresslab_guest_session");
-      sessionStorage.removeItem("stresslab_guest_session");
-      if (raw) {
-        try { setGuestSummary(JSON.parse(raw)); } catch { /* ignore */ }
-      }
-    }
-  }, [guestParam]);
+  // Guest session: look up by id from URL param or list selection
+  const activeGuestId = guestParam ?? selectedGuestId;
+  const guestSummary: SessionSummary | null = useMemo(() => {
+    if (!activeGuestId) return null;
+    const entry = guestEntries.find((e) => e.id === activeGuestId);
+    return entry?.data ?? null;
+  }, [activeGuestId, guestEntries]);
 
-  // Either from guest sessionStorage, legacy URL param, or loaded from API
+  // Either from guest localStorage, legacy URL param, or loaded from API
   const summary: SessionSummary | null = useMemo(() => {
     if (guestSummary) return guestSummary;
     if (summaryParam) {
@@ -294,7 +311,21 @@ function ResultsContent() {
 
   // Show session picker when no summary is loaded
   if (!summary) {
-    const filtered = (sessionList ?? [])
+    // Build unified list: API sessions + local guest sessions
+    type UnifiedItem = { filename: string; participant_id: string; session_start: string; total_tasks: number; accuracy_pct: number; intensity: string; guest?: boolean };
+    const apiItems: UnifiedItem[] = (sessionList ?? []).map((s) => ({ ...s }));
+    const guestItems: UnifiedItem[] = guestEntries.map((e) => ({
+      filename: e.id,
+      participant_id: e.data.participant_id || "Guest",
+      session_start: e.data.session_start,
+      total_tasks: e.data.total_tasks,
+      accuracy_pct: e.data.accuracy_pct,
+      intensity: e.data.intensity,
+      guest: true,
+    }));
+    const allItems = [...apiItems, ...guestItems];
+
+    const filtered = allItems
       .filter((s) => {
         if (filterParticipant && !s.participant_id.toLowerCase().includes(filterParticipant.toLowerCase())) return false;
         if (filterIntensity !== "all" && s.intensity !== filterIntensity) return false;
@@ -316,7 +347,7 @@ function ResultsContent() {
             Select a session to view analysis and export data
           </p>
         </div>
-        {!(sessionList?.length) ? (
+        {allItems.length === 0 ? (
           <div className="py-24 text-center text-muted-foreground">
             No sessions yet. Complete a session to see results.
           </div>
@@ -355,8 +386,8 @@ function ResultsContent() {
               >
                 {sortOrder === "desc" ? "Newest first" : "Oldest first"}
               </button>
-              {filtered.length !== sessionList.length && (
-                <span className="text-xs text-muted-foreground">{filtered.length} of {sessionList.length}</span>
+              {filtered.length !== allItems.length && (
+                <span className="text-xs text-muted-foreground">{filtered.length} of {allItems.length}</span>
               )}
             </div>
             <div className="rounded-lg border divide-y overflow-hidden">
@@ -369,10 +400,16 @@ function ResultsContent() {
                 >
                   <button
                     className="flex-1 text-left flex items-center justify-between gap-4 px-5 py-4"
-                    onClick={() => setSelectedFile(s.filename)}
+                    onClick={() => {
+                      if (s.guest) setSelectedGuestId(s.filename);
+                      else setSelectedFile(s.filename);
+                    }}
                   >
                     <div className="min-w-0">
-                      <div className="text-sm font-medium">{s.participant_id}</div>
+                      <div className="text-sm font-medium">
+                        {s.participant_id}
+                        {s.guest && <span className="ml-2 text-xs text-muted-foreground">(local)</span>}
+                      </div>
                       <div className="text-xs text-muted-foreground mt-0.5">
                         {new Date(s.session_start).toLocaleString()}
                       </div>
@@ -388,11 +425,11 @@ function ResultsContent() {
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </button>
-                  {token && (
+                  {(s.guest || token) && (
                     <button
                       className="mr-4 p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                       title="Delete session"
-                      onClick={() => handleDeleteSession(s.filename)}
+                      onClick={() => s.guest ? handleDeleteGuestSession(s.filename) : handleDeleteSession(s.filename)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -409,11 +446,11 @@ function ResultsContent() {
   return (
     <div className="space-y-6 max-w-7xl">
       <div>
-        {selectedFile && !summaryParam && !guestParam && (
+        {(selectedFile || selectedGuestId) && !summaryParam && !guestParam && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setSelectedFile(null)}
+            onClick={() => { setSelectedFile(null); setSelectedGuestId(null); }}
             className="-ml-2 mb-2 gap-1 text-muted-foreground"
           >
             <ChevronLeft className="h-4 w-4" />

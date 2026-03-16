@@ -45,7 +45,7 @@ function VerifyEmailContent() {
           )}
           {state === "success" && (
             <>
-              <p className="text-sm text-green-600 dark:text-green-400">{message}</p>
+              <p className="text-sm text-green-600">{message}</p>
               <Link href="/login" className={cn(buttonVariants(), "w-full justify-center")}>
                 Sign in
               </Link>

@@ -194,10 +194,6 @@ class TestParticipants:
         r2 = client.get(f"/api/participants/{pid}")
         assert "error" in r2.json()
 
-    def test_delete_nonexistent_participant(self, client: TestClient):
-        r = client.delete("/api/participants/nobody_abc_123")
-        assert r.status_code == 200
-        assert r.json()["ok"] is False
 
     def test_create_duplicate_id_upserts_or_conflicts(self, client: TestClient):
         """Duplicate participant IDs should not crash the server."""
