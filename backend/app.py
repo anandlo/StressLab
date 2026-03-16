@@ -1,3 +1,5 @@
+import sys
+print(f"[BOOT] Python {sys.version}, loading backend.app", flush=True)
 import asyncio
 import collections
 import csv
@@ -52,7 +54,10 @@ event_marker = EventMarker()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    try:
+        init_db()
+    except Exception as exc:
+        print(f"[STARTUP] init_db failed: {exc}", flush=True)
     event_marker.connect()
     yield
     event_marker.close()
