@@ -756,13 +756,13 @@ if os.path.isdir(FRONTEND_DIST):
     if os.path.isdir(_next_dir):
         app.mount("/_next", StaticFiles(directory=_next_dir), name="next-assets")
 
-    @app.get("/favicon.ico")
+    @app.api_route("/favicon.ico", methods=["GET", "HEAD"])
     async def favicon():
         path = os.path.join(FRONTEND_DIST, "favicon.ico")
         if os.path.isfile(path):
             return FileResponse(path)
 
-    @app.get("/")
+    @app.api_route("/", methods=["GET", "HEAD"])
     async def root():
         return FileResponse(os.path.join(FRONTEND_DIST, "index.html"))
 
@@ -781,5 +781,5 @@ if os.path.isdir(FRONTEND_DIST):
         if not os.path.isfile(_route_html):
             _route_html = os.path.join(FRONTEND_DIST, "index.html")
         _handler_fn = _make_route_handler(_route_html)
-        app.get(f"{_prefix}/{{rest:path}}", include_in_schema=False)(_handler_fn)
-        app.get(f"{_prefix}", include_in_schema=False)(_handler_fn)
+        app.api_route(f"{_prefix}/{{rest:path}}", methods=["GET", "HEAD"], include_in_schema=False)(_handler_fn)
+        app.api_route(f"{_prefix}", methods=["GET", "HEAD"], include_in_schema=False)(_handler_fn)

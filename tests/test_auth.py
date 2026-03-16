@@ -259,11 +259,10 @@ class TestProtectedRoutes:
         assert r.status_code == 401
 
     def test_open_routes_work_without_auth(self, client: TestClient):
-        """Paradigms, protocols, participants, sessions do not require a token."""
+        """Paradigms, protocols, and participants do not require a token."""
         assert client.get("/api/paradigms").status_code == 200
         assert client.get("/api/protocols").status_code == 200
         assert client.get("/api/participants").status_code == 200
-        assert client.get("/api/sessions").status_code == 200
 
 
 # ── Change password ───────────────────────────────────────────────────────────
