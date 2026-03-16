@@ -121,6 +121,12 @@ def _require_auth(user: dict | None = Depends(_get_optional_user)) -> dict:
 
 # --- REST Endpoints ---
 
+@app.get("/api/health")
+def health_check():
+    """Lightweight liveness probe used by keep-alive pings."""
+    return {"ok": True}
+
+
 @app.get("/api/paradigms")
 def get_paradigms():
     return [p.meta.model_dump() for p in PARADIGM_REGISTRY.values()]
@@ -190,13 +196,15 @@ def generate_practice_trials(body: PracticeRequest):
 
 
 @app.get("/api/sessions")
-def list_sessions_endpoint(participant_id: str | None = None):
+def list_sessions_endpoint(
+    participant_id: str | None = None,
+    user: dict = Depends(_require_auth),
+):
     return list_sessions(participant_id)
 
 
 @app.get("/api/sessions/{filename}")
-def get_session_endpoint(filename: str):
-    # Validate filename to prevent path traversal
+def get_session_endpoint(filename: str, user: dict = Depends(_require_auth)):
     if "/" in filename or "\\" in filename or ".." in filename:
         return {"error": "invalid filename"}
     data = load_session(filename)
@@ -206,7 +214,7 @@ def get_session_endpoint(filename: str):
 
 
 @app.get("/api/sessions/{filename}/csv")
-def export_session_csv(filename: str):
+def export_session_csv(filename: str, user: dict = Depends(_require_auth)):
     if "/" in filename or "\\" in filename or ".." in filename:
         return {"error": "invalid filename"}
     data = load_session(filename)
@@ -234,7 +242,11 @@ class SessionNotesUpdate(BaseModel):
 
 
 @app.patch("/api/sessions/{filename}/notes")
-def update_session_notes(filename: str, body: SessionNotesUpdate):
+def update_session_notes(
+    filename: str,
+    body: SessionNotesUpdate,
+    user: dict = Depends(_require_auth),
+):
     if "/" in filename or "\\" in filename or ".." in filename:
         return {"error": "invalid filename"}
     ok = patch_session_notes(filename, body.notes)

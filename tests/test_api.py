@@ -213,91 +213,108 @@ class TestParticipants:
 # ── Sessions ──────────────────────────────────────────────────────────────────
 
 class TestSessions:
-    def test_list_sessions_returns_list(self, client: TestClient):
+    @pytest.fixture(scope="class")
+    def authed(self, client):
+        return _register_login(client)
+
+    def test_list_sessions_requires_auth(self, client: TestClient):
         r = client.get("/api/sessions")
+        assert r.status_code == 401
+
+    def test_get_session_requires_auth(self, client: TestClient):
+        filename = _make_session()
+        r = client.get(f"/api/sessions/{filename}")
+        assert r.status_code == 401
+
+    def test_list_sessions_returns_list(self, client: TestClient, authed):
+        r = client.get("/api/sessions", headers=authed)
         assert r.status_code == 200
         assert isinstance(r.json(), list)
 
-    def test_list_sessions_filter_by_participant(self, client: TestClient):
+    def test_list_sessions_filter_by_participant(self, client: TestClient, authed):
         pid = f"filter_{secrets.token_hex(4)}"
         filename = _make_session(pid)
-        r = client.get(f"/api/sessions?participant_id={pid}")
+        r = client.get(f"/api/sessions?participant_id={pid}", headers=authed)
         assert r.status_code == 200
         fnames = [s.get("filename") for s in r.json()]
         assert filename in fnames
 
-    def test_get_session(self, client: TestClient):
+    def test_get_session(self, client: TestClient, authed):
         filename = _make_session()
-        r = client.get(f"/api/sessions/{filename}")
+        r = client.get(f"/api/sessions/{filename}", headers=authed)
         assert r.status_code == 200
         body = r.json()
         assert "trials" in body
         assert "participant_id" in body
 
-    def test_get_nonexistent_session(self, client: TestClient):
-        r = client.get("/api/sessions/does_not_exist.json")
+    def test_get_nonexistent_session(self, client: TestClient, authed):
+        r = client.get("/api/sessions/does_not_exist.json", headers=authed)
         body = r.json()
         assert "error" in body
 
-    def test_get_session_path_traversal_blocked(self, client: TestClient):
-        # Filename starting with .. is caught by the app-level traversal check
-        r = client.get("/api/sessions/..passwd")
+    def test_get_session_path_traversal_blocked(self, client: TestClient, authed):
+        r = client.get("/api/sessions/..passwd", headers=authed)
         body = r.json()
         assert "error" in body
 
-    def test_get_session_path_traversal_backslash_blocked(self, client: TestClient):
-        r = client.get("/api/sessions/..\\windows\\system32")
+    def test_get_session_path_traversal_backslash_blocked(self, client: TestClient, authed):
+        r = client.get("/api/sessions/..\\windows\\system32", headers=authed)
         body = r.json()
         assert "error" in body
 
-    def test_export_session_csv(self, client: TestClient):
+    def test_export_session_csv(self, client: TestClient, authed):
         filename = _make_session()
-        r = client.get(f"/api/sessions/{filename}/csv")
+        r = client.get(f"/api/sessions/{filename}/csv", headers=authed)
         assert r.status_code == 200
         assert "text/csv" in r.headers["content-type"]
         lines = r.text.strip().split("\n")
         assert len(lines) >= 2  # header + at least one trial row
 
-    def test_export_csv_header_columns(self, client: TestClient):
+    def test_export_csv_header_columns(self, client: TestClient, authed):
         filename = _make_session()
-        r = client.get(f"/api/sessions/{filename}/csv")
+        r = client.get(f"/api/sessions/{filename}/csv", headers=authed)
         header = r.text.strip().split("\n")[0]
         for col in ("trial_id", "paradigm_id", "is_correct", "response_time_ms"):
             assert col in header
 
-    def test_export_csv_nonexistent_session(self, client: TestClient):
-        r = client.get("/api/sessions/ghost.json/csv")
+    def test_export_csv_nonexistent_session(self, client: TestClient, authed):
+        r = client.get("/api/sessions/ghost.json/csv", headers=authed)
         body = r.json()
         assert "error" in body
 
-    def test_export_csv_path_traversal_blocked(self, client: TestClient):
-        r = client.get("/api/sessions/..secret/csv")
+    def test_export_csv_path_traversal_blocked(self, client: TestClient, authed):
+        r = client.get("/api/sessions/..secret/csv", headers=authed)
         body = r.json()
         assert "error" in body
 
-    def test_patch_session_notes(self, client: TestClient):
+    def test_patch_session_notes(self, client: TestClient, authed):
         filename = _make_session()
-        r = client.patch(f"/api/sessions/{filename}/notes", json={"notes": "Interesting result"})
+        r = client.patch(f"/api/sessions/{filename}/notes",
+                         json={"notes": "Interesting result"}, headers=authed)
         assert r.status_code == 200
         assert r.json()["ok"] is True
         # Verify notes were saved
-        session_data = client.get(f"/api/sessions/{filename}").json()
+        session_data = client.get(f"/api/sessions/{filename}", headers=authed).json()
         assert session_data.get("notes") == "Interesting result"
 
-    def test_patch_notes_empty_string(self, client: TestClient):
+    def test_patch_notes_empty_string(self, client: TestClient, authed):
         filename = _make_session()
-        client.patch(f"/api/sessions/{filename}/notes", json={"notes": "initial note"})
-        r = client.patch(f"/api/sessions/{filename}/notes", json={"notes": ""})
+        client.patch(f"/api/sessions/{filename}/notes",
+                     json={"notes": "initial note"}, headers=authed)
+        r = client.patch(f"/api/sessions/{filename}/notes",
+                         json={"notes": ""}, headers=authed)
         assert r.status_code == 200
         assert r.json()["ok"] is True
 
-    def test_patch_notes_nonexistent_session(self, client: TestClient):
-        r = client.patch("/api/sessions/ghost_xyz.json/notes", json={"notes": "hello"})
+    def test_patch_notes_nonexistent_session(self, client: TestClient, authed):
+        r = client.patch("/api/sessions/ghost_xyz.json/notes",
+                         json={"notes": "hello"}, headers=authed)
         body = r.json()
         assert "error" in body
 
-    def test_patch_notes_path_traversal_blocked(self, client: TestClient):
-        r = client.patch("/api/sessions/..evil.json/notes", json={"notes": "x"})
+    def test_patch_notes_path_traversal_blocked(self, client: TestClient, authed):
+        r = client.patch("/api/sessions/..evil.json/notes",
+                         json={"notes": "x"}, headers=authed)
         body = r.json()
         assert "error" in body
 
@@ -306,25 +323,22 @@ class TestSessions:
         r = client.request("DELETE", f"/api/sessions/{filename}")
         assert r.status_code == 401
 
-    def test_delete_session(self, client: TestClient):
+    def test_delete_session(self, client: TestClient, authed):
         filename = _make_session()
-        headers = _register_login(client)
-        r = client.request("DELETE", f"/api/sessions/{filename}", headers=headers)
+        r = client.request("DELETE", f"/api/sessions/{filename}", headers=authed)
         assert r.status_code == 200
         assert r.json()["ok"] is True
         # Confirm it is gone
-        r2 = client.get(f"/api/sessions/{filename}")
+        r2 = client.get(f"/api/sessions/{filename}", headers=authed)
         assert "error" in r2.json()
 
-    def test_delete_nonexistent_session(self, client: TestClient):
-        headers = _register_login(client)
+    def test_delete_nonexistent_session(self, client: TestClient, authed):
         r = client.request("DELETE", "/api/sessions/ghost_xyz_999.json",
-                           headers=headers)
+                           headers=authed)
         assert r.status_code == 404
 
-    def test_delete_session_path_traversal_blocked(self, client: TestClient):
-        headers = _register_login(client)
-        r = client.request("DELETE", "/api/sessions/..evil", headers=headers)
+    def test_delete_session_path_traversal_blocked(self, client: TestClient, authed):
+        r = client.request("DELETE", "/api/sessions/..evil", headers=authed)
         assert r.status_code == 422
 
 
