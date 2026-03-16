@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -94,7 +94,8 @@ function CustomChartTooltip({
 
 function ResultsContent() {
   const searchParams = useSearchParams();
-  const summaryParam = searchParams.get("summary");
+  const summaryParam = searchParams.get("summary"); // legacy fallback
+  const guestParam = searchParams.get("guest");
   const sessionParam = searchParams.get("session");
 
   const { token } = useAuth();
@@ -129,8 +130,22 @@ function ResultsContent() {
     }
   }
 
-  // Either from URL param (just-completed session) or loaded from API
+  // Guest session: read once from sessionStorage then clear it so the
+  // data does not persist beyond this page view.
+  const [guestSummary, setGuestSummary] = useState<SessionSummary | null>(null);
+  useEffect(() => {
+    if (guestParam === "1") {
+      const raw = sessionStorage.getItem("stresslab_guest_session");
+      sessionStorage.removeItem("stresslab_guest_session");
+      if (raw) {
+        try { setGuestSummary(JSON.parse(raw)); } catch { /* ignore */ }
+      }
+    }
+  }, [guestParam]);
+
+  // Either from guest sessionStorage, legacy URL param, or loaded from API
   const summary: SessionSummary | null = useMemo(() => {
+    if (guestSummary) return guestSummary;
     if (summaryParam) {
       try {
         return JSON.parse(decodeURIComponent(summaryParam));
@@ -139,7 +154,7 @@ function ResultsContent() {
       }
     }
     return loadedSession ?? null;
-  }, [summaryParam, loadedSession]);
+  }, [guestSummary, summaryParam, loadedSession]);
 
   // Charts data
   const accuracyOverTime = useMemo(() => {
@@ -394,7 +409,7 @@ function ResultsContent() {
   return (
     <div className="space-y-6 max-w-7xl">
       <div>
-        {selectedFile && !summaryParam && (
+        {selectedFile && !summaryParam && !guestParam && (
           <Button
             variant="ghost"
             size="sm"

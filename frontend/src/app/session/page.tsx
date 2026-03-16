@@ -150,9 +150,15 @@ function SessionContent() {
   }
 
   if (state === SessionState.COMPLETE && summary) {
-    const encoded = encodeURIComponent(JSON.stringify(summary));
-    const sf = sessionFile ? `&session=${encodeURIComponent(sessionFile)}` : "";
-    router.push(`/results?summary=${encoded}${sf}`);
+    if (sessionFile) {
+      // Authenticated: session is saved server-side, navigate by filename only.
+      router.push(`/results?session=${encodeURIComponent(sessionFile)}`);
+    } else {
+      // Guest: store in sessionStorage so the data never leaves this browser
+      // (avoids iCloud tab sync leaking the summary to other devices).
+      sessionStorage.setItem("stresslab_guest_session", JSON.stringify(summary));
+      router.push("/results?guest=1");
+    }
     return null;
   }
 
