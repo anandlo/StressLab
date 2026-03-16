@@ -102,12 +102,18 @@ export function AppSidebar() {
       <SidebarFooter className="px-4 py-3 space-y-2">
         {user ? (
           <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+            <Link
+              href="/account"
+              className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:border-primary/60 hover:text-foreground transition-colors"
+            >
               <User className="h-4 w-4 shrink-0 text-primary" />
-              <span className="text-[12px] font-medium leading-tight truncate">
-                {user.email}
-              </span>
-            </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-[12px] font-medium leading-tight truncate">{user.email}</span>
+                {!user.email_verified && (
+                  <span className="text-[10px] text-amber-500 leading-tight">Email unverified</span>
+                )}
+              </div>
+            </Link>
             <Button
               variant="ghost"
               size="sm"

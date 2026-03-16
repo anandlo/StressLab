@@ -2,7 +2,7 @@
 
 Required packages (see requirements.txt):
     python-jose[cryptography]
-    passlib[bcrypt]
+    bcrypt
     pyotp
     qrcode[pil]
 """
@@ -13,8 +13,8 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
+import bcrypt as _bcrypt
 from jose import jwt
-from passlib.context import CryptContext
 import pyotp
 import qrcode
 
@@ -42,17 +42,21 @@ SECRET_KEY: str = os.environ.get("SECRET_KEY") or _load_or_create_secret()
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
 # ── Password hashing ──────────────────────────────────────────────────────────
+# bcrypt >= 4.0 enforces the 72-byte limit rather than silently truncating.
+# We truncate explicitly so that the behavior is transparent and testable.
+_BCRYPT_MAX = 72
+
 
 def hash_password(password: str) -> str:
-    return _pwd_context.hash(password)
+    return _bcrypt.hashpw(password.encode()[:_BCRYPT_MAX], _bcrypt.gensalt()).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd_context.verify(plain, hashed)
+    try:
+        return _bcrypt.checkpw(plain.encode()[:_BCRYPT_MAX], hashed.encode())
+    except Exception:
+        return False
 
 
 # ── JWT ───────────────────────────────────────────────────────────────────────

@@ -13,6 +13,13 @@ from . import db as _db
 
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
 
+# Whitelist prevents callers from setting arbitrary column names in the dynamic
+# UPDATE query, which would be a SQL injection vector.
+_ALLOWED_USER_FIELDS = {
+    "phone", "password_hash", "email_verified", "email_verify_token",
+    "mfa_enabled", "mfa_secret", "mfa_secret_pending", "field_templates",
+}
+
 
 def _load() -> dict:
     if os.path.isfile(USERS_FILE):
@@ -99,6 +106,9 @@ def create_user(email: str, password_hash: str, phone: str | None = None) -> dic
 
 
 def update_user(user_id: str, **kwargs) -> dict | None:
+    invalid = set(kwargs.keys()) - _ALLOWED_USER_FIELDS
+    if invalid:
+        raise ValueError(f"Attempted update of disallowed user field(s): {invalid}")
     if _db.DATABASE_URL:
         if not kwargs:
             return get_user_by_id(user_id)
@@ -126,7 +136,7 @@ def update_user(user_id: str, **kwargs) -> dict | None:
 
 def user_public(user: dict) -> dict:
     """Return only the fields safe to send to the client."""
-    return {k: user[k] for k in ("id", "email", "phone", "mfa_enabled", "created")}
+    return {k: user[k] for k in ("id", "email", "phone", "mfa_enabled", "email_verified", "created")}
 
 
 def consume_email_verify_token(token: str) -> bool:

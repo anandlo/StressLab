@@ -5,6 +5,7 @@ import io
 import json
 import logging
 import re
+import secrets
 import time
 from contextlib import asynccontextmanager
 
@@ -24,7 +25,7 @@ from .protocol import PROTOCOL_PRESETS, PROTOCOL_REGISTRY
 from .participant import (
     create_participant, get_participant, list_participants, add_session_file,
     update_participant, delete_participant)
-from .logging_utils import save_session, list_sessions, load_session, DATA_DIR
+from .logging_utils import save_session, list_sessions, load_session, patch_session_notes, DATA_DIR
 from .events import EventMarker
 from .auth import (
     hash_password, verify_password, create_token, decode_token,
@@ -108,6 +109,13 @@ def _require_user(user: dict | None = Depends(_get_optional_user)) -> dict:
     if user is None:
         # Open-access mode: return anonymous placeholder user
         return {"id": "anonymous", "email": "anonymous"}
+    return user
+
+
+def _require_auth(user: dict | None = Depends(_get_optional_user)) -> dict:
+    """Hard 401 for routes that require a real account (projects, protocols, settings)."""
+    if user is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Authentication required")
     return user
 
 
@@ -229,15 +237,8 @@ class SessionNotesUpdate(BaseModel):
 def update_session_notes(filename: str, body: SessionNotesUpdate):
     if "/" in filename or "\\" in filename or ".." in filename:
         return {"error": "invalid filename"}
-    filepath = os.path.join(DATA_DIR, filename)
-    if not os.path.isfile(filepath):
-        return {"error": "not found"}
-    with open(filepath) as f:
-        data = json.load(f)
-    data["notes"] = body.notes
-    with open(filepath, "w") as f:
-        json.dump(data, f, indent=2, default=str)
-    return {"ok": True}
+    ok = patch_session_notes(filename, body.notes)
+    return {"ok": True} if ok else {"error": "not found"}
 
 
 # --- Auth routes ---
@@ -273,6 +274,44 @@ def verify_email(token: str):
     if consume_email_verify_token(token):
         return {"ok": True, "message": "Email verified successfully"}
     raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired token")
+
+
+class ResendVerificationBody(BaseModel):
+    email: str
+
+
+@app.post("/api/auth/resend-verification")
+def resend_verification(body: ResendVerificationBody, request: Request):
+    _check_rate_limit(f"resend:{request.client.host}")
+    email = body.email.strip().lower()
+    # Always return the same generic message to prevent email enumeration
+    generic = "If that address is registered and unverified, a verification link has been sent"
+    user = get_user_by_email(email)
+    if not user or user.get("email_verified"):
+        return {"ok": True, "message": generic}
+    new_token = secrets.token_urlsafe(32)
+    update_user(user["id"], email_verify_token=new_token)
+    send_verification_email(email, new_token)
+    return {"ok": True, "message": generic}
+
+
+class ChangePasswordBody(BaseModel):
+    old_password: str
+    new_password: str
+
+
+@app.post("/api/auth/change-password")
+def change_password(body: ChangePasswordBody, user: dict = Depends(_require_auth)):
+    if not verify_password(body.old_password, user["password_hash"]):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect current password")
+    if len(body.new_password) < 8:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Password must be at least 8 characters")
+    if len(body.new_password) > 72:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Password too long (max 72 characters)")
+    update_user(user["id"], password_hash=hash_password(body.new_password))
+    return {"ok": True}
 
 
 class LoginBody(BaseModel):
@@ -317,12 +356,23 @@ def mfa_verify(body: MFAVerifyBody):
 
 
 @app.get("/api/auth/me")
-def get_me(user: dict = Depends(_require_user)):
+def get_me(user: dict = Depends(_require_auth)):
     return user_public(user)
 
 
+class UpdateProfileBody(BaseModel):
+    phone: str | None = None
+
+
+@app.patch("/api/auth/profile")
+def update_profile(body: UpdateProfileBody, user: dict = Depends(_require_auth)):
+    if body.phone is not None:
+        update_user(user["id"], phone=body.phone.strip() or None)
+    return user_public(get_user_by_id(user["id"]))
+
+
 @app.post("/api/auth/mfa/setup")
-def mfa_setup(user: dict = Depends(_require_user)):
+def mfa_setup(user: dict = Depends(_require_auth)):
     secret = generate_totp_secret()
     update_user(user["id"], mfa_secret_pending=secret)
     qr = totp_qr_png_b64(secret, user["email"])
@@ -334,7 +384,7 @@ class MFAEnableBody(BaseModel):
 
 
 @app.post("/api/auth/mfa/enable")
-def mfa_enable(body: MFAEnableBody, user: dict = Depends(_require_user)):
+def mfa_enable(body: MFAEnableBody, user: dict = Depends(_require_auth)):
     secret = user.get("mfa_secret_pending")
     if not secret:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "No pending MFA setup. Call /mfa/setup first.")
@@ -345,7 +395,7 @@ def mfa_enable(body: MFAEnableBody, user: dict = Depends(_require_user)):
 
 
 @app.delete("/api/auth/mfa/disable")
-def mfa_disable(user: dict = Depends(_require_user)):
+def mfa_disable(user: dict = Depends(_require_auth)):
     update_user(user["id"], mfa_enabled=False, mfa_secret=None, mfa_secret_pending=None)
     return {"ok": True}
 
@@ -355,7 +405,7 @@ class DeleteAccountBody(BaseModel):
 
 
 @app.delete("/api/auth/account")
-def delete_account(body: DeleteAccountBody, user: dict = Depends(_require_user)):
+def delete_account(body: DeleteAccountBody, user: dict = Depends(_require_auth)):
     """Permanently delete the authenticated user's account and all owned data.
     Requires current password for confirmation. Session records are kept."""
     if not verify_password(body.password, user["password_hash"]):
@@ -375,12 +425,12 @@ class FieldTemplatesBody(BaseModel):
 
 
 @app.get("/api/user/field-templates")
-def get_field_templates(user: dict = Depends(_require_user)):
+def get_field_templates(user: dict = Depends(_require_auth)):
     return {"templates": user.get("field_templates", [])}
 
 
 @app.put("/api/user/field-templates")
-def set_field_templates(body: FieldTemplatesBody, user: dict = Depends(_require_user)):
+def set_field_templates(body: FieldTemplatesBody, user: dict = Depends(_require_auth)):
     # Deduplicate while preserving order; strip blanks
     seen: set[str] = set()
     cleaned: list[str] = []
@@ -401,12 +451,12 @@ class ProjectCreate(BaseModel):
 
 
 @app.get("/api/projects")
-def list_projects_endpoint(user: dict = Depends(_require_user)):
+def list_projects_endpoint(user: dict = Depends(_require_auth)):
     return list_projects(user["id"])
 
 
 @app.post("/api/projects", status_code=status.HTTP_201_CREATED)
-def create_project_endpoint(body: ProjectCreate, user: dict = Depends(_require_user)):
+def create_project_endpoint(body: ProjectCreate, user: dict = Depends(_require_auth)):
     name = body.name.strip()
     if not name:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Project name required")
@@ -414,7 +464,7 @@ def create_project_endpoint(body: ProjectCreate, user: dict = Depends(_require_u
 
 
 @app.get("/api/projects/{project_id}")
-def get_project_endpoint(project_id: str, user: dict = Depends(_require_user)):
+def get_project_endpoint(project_id: str, user: dict = Depends(_require_auth)):
     project = get_project(project_id)
     if not project or project["owner_id"] != user["id"]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
@@ -428,7 +478,7 @@ class ProjectUpdate(BaseModel):
 
 @app.put("/api/projects/{project_id}")
 def update_project_endpoint(project_id: str, body: ProjectUpdate,
-                             user: dict = Depends(_require_user)):
+                             user: dict = Depends(_require_auth)):
     project = get_project(project_id)
     if not project or project["owner_id"] != user["id"]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
@@ -438,7 +488,7 @@ def update_project_endpoint(project_id: str, body: ProjectUpdate,
 
 
 @app.delete("/api/projects/{project_id}")
-def delete_project_endpoint(project_id: str, user: dict = Depends(_require_user)):
+def delete_project_endpoint(project_id: str, user: dict = Depends(_require_auth)):
     project = get_project(project_id)
     if not project or project["owner_id"] != user["id"]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
@@ -452,7 +502,7 @@ class SessionAttachBody(BaseModel):
 
 @app.post("/api/projects/{project_id}/sessions")
 def attach_session(project_id: str, body: SessionAttachBody,
-                   user: dict = Depends(_require_user)):
+                   user: dict = Depends(_require_auth)):
     project = get_project(project_id)
     if not project or project["owner_id"] != user["id"]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
@@ -463,7 +513,7 @@ def attach_session(project_id: str, body: SessionAttachBody,
 
 
 @app.delete("/api/projects/{project_id}/sessions/{filename}")
-def detach_session(project_id: str, filename: str, user: dict = Depends(_require_user)):
+def detach_session(project_id: str, filename: str, user: dict = Depends(_require_auth)):
     project = get_project(project_id)
     if not project or project["owner_id"] != user["id"]:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
@@ -485,12 +535,12 @@ class UserProtocolBody(BaseModel):
 
 
 @app.get("/api/user-protocols")
-def list_user_protocols_endpoint(user: dict = Depends(_require_user)):
+def list_user_protocols_endpoint(user: dict = Depends(_require_auth)):
     return list_user_protocols(user["id"])
 
 
 @app.post("/api/user-protocols", status_code=status.HTTP_201_CREATED)
-def create_user_protocol_endpoint(body: UserProtocolBody, user: dict = Depends(_require_user)):
+def create_user_protocol_endpoint(body: UserProtocolBody, user: dict = Depends(_require_auth)):
     name = body.name.strip()
     if not name:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Protocol name required")
@@ -499,7 +549,7 @@ def create_user_protocol_endpoint(body: UserProtocolBody, user: dict = Depends(_
 
 
 @app.delete("/api/user-protocols/{protocol_id}")
-def delete_user_protocol_endpoint(protocol_id: str, user: dict = Depends(_require_user)):
+def delete_user_protocol_endpoint(protocol_id: str, user: dict = Depends(_require_auth)):
     ok = delete_user_protocol(user["id"], protocol_id)
     if not ok:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Protocol not found")
@@ -659,7 +709,8 @@ if os.path.isdir(FRONTEND_DIST):
     for _prefix in ("/participants", "/protocol", "/practice",
                      "/session", "/results", "/library",
                      "/login", "/register", "/mfa-verify", "/mfa-setup",
-                     "/verify-email", "/projects", "/support", "/briefing"):
+                     "/verify-email", "/projects", "/support", "/briefing",
+                     "/account"):
         _route_html = os.path.join(FRONTEND_DIST, f"{_prefix.lstrip('/')}.html")
         if not os.path.isfile(_route_html):
             _route_html = os.path.join(FRONTEND_DIST, "index.html")

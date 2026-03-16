@@ -101,3 +101,30 @@ def load_session(filename: str) -> dict | None:
         with open(filepath) as f:
             return json.load(f)
     return None
+
+
+def patch_session_notes(filename: str, notes: str) -> bool:
+    """Update the notes field on a stored session. Returns True if found."""
+    _db = _get_db()
+    if _db.DATABASE_URL:
+        conn = _db.get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE sessions SET data = data || %s::jsonb WHERE filename = %s RETURNING filename",
+                    (json.dumps({"notes": notes}), filename)
+                )
+                updated = cur.fetchone()
+            conn.commit()
+            return updated is not None
+        finally:
+            conn.close()
+    filepath = os.path.join(DATA_DIR, filename)
+    if not os.path.isfile(filepath):
+        return False
+    with open(filepath) as f:
+        data = json.load(f)
+    data["notes"] = notes
+    with open(filepath, "w") as f:
+        json.dump(data, f, indent=2, default=str)
+    return True

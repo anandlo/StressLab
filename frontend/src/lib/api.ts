@@ -141,6 +141,48 @@ export function mfaDisable(token: string): Promise<{ ok: boolean }> {
   });
 }
 
+export function resendVerification(email: string): Promise<{ ok: boolean; message: string }> {
+  return fetchJSON("/api/auth/resend-verification", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function changePassword(
+  token: string,
+  oldPassword: string,
+  newPassword: string,
+): Promise<{ ok: boolean }> {
+  return fetchJSON("/api/auth/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+  });
+}
+
+export function updateProfile(
+  token: string,
+  phone: string | null,
+): Promise<User> {
+  return fetchJSON("/api/auth/profile", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ phone }),
+  });
+}
+
+export function deleteAccount(
+  token: string,
+  password: string,
+): Promise<{ ok: boolean; message: string }> {
+  return fetchJSON("/api/auth/account", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ password }),
+  });
+}
+
 export function verifyEmail(token: string): Promise<{ ok: boolean; message: string }> {
   return fetchJSON(`/api/auth/verify-email?token=${encodeURIComponent(token)}`);
 }

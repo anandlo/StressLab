@@ -178,6 +178,7 @@ export interface User {
   email: string;
   phone: string | null;
   mfa_enabled: boolean;
+  email_verified: boolean;
   created: string;
 }
 
