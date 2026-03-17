@@ -38,12 +38,14 @@ APP_URL = os.environ.get("APP_URL", "http://localhost:8000")
 def _send_via_resend(to: str, subject: str, text: str) -> None:
     import resend
     resend.api_key = RESEND_API_KEY
-    resend.Emails.send({
+    logger.info("Resend: sending to %s from %s", to, RESEND_FROM)
+    result = resend.Emails.send({
         "from": RESEND_FROM,
         "to": [to],
         "subject": subject,
         "text": text,
     })
+    logger.info("Resend response: %s", result)
 
 
 def _send_via_smtp(to: str, subject: str, text: str) -> None:

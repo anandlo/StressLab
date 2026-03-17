@@ -20,6 +20,7 @@ export default function ForgotPasswordPage() {
     try {
       await forgotPassword(email.trim());
       setSent(true);
+      toast.success("If that email is registered, a reset link has been sent.");
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
         toast.error("Too many attempts. Please wait a few minutes.");
