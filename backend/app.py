@@ -57,10 +57,15 @@ async def lifespan(app: FastAPI):
     from .db import DATABASE_URL, _connect_kwargs
     if DATABASE_URL:
         try:
+            import urllib.parse as _up
+            _p = _up.urlparse(DATABASE_URL)
+            _masked = DATABASE_URL.replace(_p.password or "", "***") if _p.password else DATABASE_URL
+            print(f"[STARTUP] DATABASE_URL (masked): {_masked}", flush=True)
             kw = _connect_kwargs()
             print(
                 f"[STARTUP] DB host={kw['host']} port={kw['port']} "
-                f"user={kw['user']} db={kw['dbname']} ssl={kw['sslmode']}",
+                f"user={kw['user']} db={kw['dbname']} "
+                f"pwlen={len(kw['password'])} ssl={kw['sslmode']}",
                 flush=True,
             )
         except Exception as e:
