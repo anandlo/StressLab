@@ -5,11 +5,28 @@ import type { ParadigmMeta, ProtocolPreset, Participant, SessionListItem, Sessio
 // Locally with FastAPI serving the frontend directly, leave it unset (relative URLs).
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
+/** Error thrown by API calls, carrying the HTTP status code. */
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${url}`, init);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${url}`, init);
+  } catch {
+    throw new ApiError(0, "Unable to reach the server. Check your connection.");
+  }
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`${res.status}: ${text}`);
+    let detail: string | undefined;
+    try {
+      const body = await res.json();
+      detail = typeof body.detail === "string" ? body.detail : undefined;
+    } catch { /* body wasn't JSON */ }
+    throw new ApiError(res.status, detail ?? `Request failed (${res.status})`);
   }
   return res.json();
 }

@@ -9,6 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
+import { ApiError } from "@/lib/api";
+import { PasswordStrength } from "@/components/password-strength";
 
 export default function RegisterPage() {
   const { register, login } = useAuth();
@@ -36,7 +38,23 @@ export default function RegisterPage() {
         router.push("/");
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Registration failed");
+      if (err instanceof ApiError) {
+        switch (err.status) {
+          case 409:
+            toast.error("An account with this email already exists. Try signing in.");
+            break;
+          case 422:
+            toast.error(err.message);
+            break;
+          case 503:
+            toast.error("Server is temporarily unavailable. Try again shortly.");
+            break;
+          default:
+            toast.error(err.message);
+        }
+      } else {
+        toast.error("Registration failed");
+      }
     } finally {
       setLoading(false);
     }
@@ -74,6 +92,7 @@ export default function RegisterPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">Minimum 8 characters</p>
+              <PasswordStrength password={password} />
             </div>
             <div className="space-y-1">
               <Label htmlFor="phone">

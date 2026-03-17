@@ -2,16 +2,15 @@ services:
   - type: web
     name: stresslab
     runtime: python
+    pythonVersion: "3.11.0"
     buildCommand: pip install -r requirements.txt && cd frontend && npm ci && npm run build
     startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHONUNBUFFERED
         value: "1"
-      - key: PYTHON_VERSION
-        value: 3.11.0
       - key: SECRET_KEY
         generateValue: true
       - key: DATABASE_URL
-        sync: false          # fill in from Supabase
+        sync: false          # Use the Supabase session-mode pooler URL (port 5432, IPv4)
       - key: CORS_ORIGINS
         sync: false          # fill in with your Render URL after first deploy

@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
+import { ApiError } from "@/lib/api";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -29,7 +30,23 @@ export default function LoginPage() {
         router.push("/");
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Login failed");
+      if (err instanceof ApiError) {
+        switch (err.status) {
+          case 401:
+            toast.error("Invalid email or password");
+            break;
+          case 429:
+            toast.error("Too many attempts. Please wait a few minutes.");
+            break;
+          case 503:
+            toast.error("Server is temporarily unavailable. Try again shortly.");
+            break;
+          default:
+            toast.error(err.message);
+        }
+      } else {
+        toast.error("Login failed");
+      }
     } finally {
       setLoading(false);
     }

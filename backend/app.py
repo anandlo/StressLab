@@ -15,7 +15,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSock
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from jose import JWTError
 from pydantic import BaseModel
 import os
@@ -45,7 +45,7 @@ from .user_protocols import (
     list_user_protocols, create_user_protocol, delete_user_protocol,
 )
 from .email import send_verification_email
-from .db import init_db
+from .db import init_db, DatabaseUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(DatabaseUnavailable)
+async def _db_unavailable(_request: Request, exc: DatabaseUnavailable):
+    logger.error("Database unavailable: %s", exc)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Database temporarily unavailable. Please try again later."},
+    )
+
 
 # Serve frontend if built (Next.js static export)
 FRONTEND_DIST = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "out")

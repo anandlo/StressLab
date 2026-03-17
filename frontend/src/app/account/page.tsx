@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { CheckCircle2, AlertCircle, Shield, ShieldOff, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { UserAvatar } from "@/components/user-avatar";
+import { PasswordStrength } from "@/components/password-strength";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -35,6 +36,7 @@ import {
   mfaSetup,
   mfaEnable,
   mfaDisable,
+  ApiError,
 } from "@/lib/api";
 
 export default function AccountPage() {
@@ -88,7 +90,11 @@ export default function AccountPage() {
       await refreshUser();
       toast.success("Profile updated");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update profile");
+      if (err instanceof ApiError && err.status === 503) {
+        toast.error("Server is temporarily unavailable. Try again shortly.");
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to update profile");
+      }
     } finally {
       setSavingProfile(false);
     }
@@ -128,7 +134,13 @@ export default function AccountPage() {
       setNewPw("");
       setConfirmPw("");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to change password");
+      if (err instanceof ApiError && err.status === 401) {
+        toast.error("Current password is incorrect");
+      } else if (err instanceof ApiError && err.status === 503) {
+        toast.error("Server is temporarily unavailable. Try again shortly.");
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to change password");
+      }
     } finally {
       setSavingPw(false);
     }
@@ -193,7 +205,13 @@ export default function AccountPage() {
       toast.success("Account deleted");
       router.push("/");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete account");
+      if (err instanceof ApiError && err.status === 401) {
+        toast.error("Incorrect password");
+      } else if (err instanceof ApiError && err.status === 503) {
+        toast.error("Server is temporarily unavailable. Try again shortly.");
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to delete account");
+      }
     } finally {
       setDeleting(false);
       setDeleteDialogOpen(false);
@@ -319,6 +337,7 @@ export default function AccountPage() {
                 value={newPw}
                 onChange={(e) => setNewPw(e.target.value)}
               />
+              <PasswordStrength password={newPw} />
             </div>
             <div className="space-y-1">
               <Label htmlFor="confirm-pw">Confirm new password</Label>

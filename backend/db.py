@@ -11,9 +11,20 @@ from psycopg2.extras import RealDictCursor
 DATABASE_URL: str | None = os.environ.get("DATABASE_URL")
 
 
+class DatabaseUnavailable(Exception):
+    """Raised when the database cannot be reached."""
+
+
 def get_conn() -> psycopg2.extensions.connection:
     """Return a new psycopg2 connection. Caller must close it."""
-    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    try:
+        return psycopg2.connect(
+            DATABASE_URL,
+            cursor_factory=RealDictCursor,
+            connect_timeout=5,
+        )
+    except psycopg2.OperationalError as exc:
+        raise DatabaseUnavailable(str(exc)) from exc
 
 
 def init_db() -> None:
