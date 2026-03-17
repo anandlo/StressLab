@@ -243,7 +243,7 @@ export default function AccountPage() {
             <div>
               <p className="text-sm font-medium">{displayName.trim() || user.email.split("@")[0]}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Avatar generated from your display name — no photo storage.
+                Avatar generated from your display name.
               </p>
             </div>
           </div>
