@@ -54,6 +54,16 @@ event_marker = EventMarker()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from .db import DATABASE_URL
+    if DATABASE_URL:
+        try:
+            import urllib.parse
+            p = urllib.parse.urlparse(DATABASE_URL)
+            print(f"[STARTUP] DB host={p.hostname} port={p.port} user={p.username} db={p.path.lstrip('/')}", flush=True)
+        except Exception:
+            print("[STARTUP] DATABASE_URL set but could not parse", flush=True)
+    else:
+        print("[STARTUP] No DATABASE_URL — using local JSON storage", flush=True)
     try:
         init_db()
     except Exception as exc:
