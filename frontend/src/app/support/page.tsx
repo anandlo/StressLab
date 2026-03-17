@@ -75,7 +75,7 @@ export default function SupportPage() {
         ].join("\n")
       );
       window.open(
-        `mailto:anand@example.com?subject=${subject}&body=${body}`,
+        `mailto:anandlo@dal.ca?subject=${subject}&body=${body}`,
         "_blank"
       );
       setSubmitted(true);
@@ -108,11 +108,11 @@ export default function SupportPage() {
               enquiries, reach out directly.
             </p>
             <a
-              href="mailto:anand@example.com"
+              href="mailto:anandlo@dal.ca"
               className="inline-flex items-center gap-1.5 text-foreground font-medium hover:underline underline-offset-2"
             >
               <Mail className="h-3.5 w-3.5" />
-              anand@example.com
+              anandlo@dal.ca
               <ExternalLink className="h-3 w-3 opacity-50" />
             </a>
           </CardContent>
