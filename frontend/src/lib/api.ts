@@ -46,7 +46,7 @@ export function createParticipant(
   return fetchJSON("/api/participants", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ participant_id: participantId, demographics }),
+    body: JSON.stringify({ id: participantId, demographics }),
   });
 }
 
