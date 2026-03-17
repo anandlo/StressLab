@@ -4,6 +4,7 @@ When DATABASE_URL is set (production/Render), uses Postgres via psycopg2.
 When unset, all storage modules fall back to local JSON files (local dev).
 """
 import os
+import urllib.parse
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -15,14 +16,30 @@ class DatabaseUnavailable(Exception):
     """Raised when the database cannot be reached."""
 
 
+def _connect_kwargs() -> dict:
+    """Parse DATABASE_URL into psycopg2 keyword args, enforcing sslmode=require."""
+    p = urllib.parse.urlparse(DATABASE_URL)
+    kwargs: dict = {
+        "host": p.hostname,
+        "port": p.port or 5432,
+        "dbname": p.path.lstrip("/"),
+        "user": p.username,
+        "password": urllib.parse.unquote(p.password or ""),
+        "sslmode": "require",
+        "connect_timeout": 5,
+        "cursor_factory": RealDictCursor,
+    }
+    # Allow override via query string (e.g. ?sslmode=disable for local testing)
+    qs = urllib.parse.parse_qs(p.query)
+    if "sslmode" in qs:
+        kwargs["sslmode"] = qs["sslmode"][0]
+    return kwargs
+
+
 def get_conn() -> psycopg2.extensions.connection:
     """Return a new psycopg2 connection. Caller must close it."""
     try:
-        return psycopg2.connect(
-            DATABASE_URL,
-            cursor_factory=RealDictCursor,
-            connect_timeout=5,
-        )
+        return psycopg2.connect(**_connect_kwargs())
     except psycopg2.OperationalError as exc:
         raise DatabaseUnavailable(str(exc)) from exc
 
