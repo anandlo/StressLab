@@ -28,13 +28,19 @@ jobs:
 
       - name: Ping health endpoint
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${{ secrets.RENDER_URL }}/api/health")
-          echo "Response status: $STATUS"
-          if [ "$STATUS" = "200" ]; then
-            echo "OK: service is alive"
-          elif [ "$STATUS" = "000" ]; then
-            echo "ERROR: no response / timeout — service may be spun down"
-            exit 1
-          else
-            echo "WARNING: unexpected status $STATUS"
-          fi
+          # Render free-tier cold starts can take 60-90s, so we retry once
+          # after an initial generous timeout.
+          for attempt in 1 2; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 120 "${{ secrets.RENDER_URL }}/api/health")
+            echo "Attempt $attempt — response status: $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "OK: service is alive"
+              exit 0
+            fi
+            if [ "$attempt" -eq 1 ]; then
+              echo "First attempt failed (status $STATUS), retrying in 10s..."
+              sleep 10
+            fi
+          done
+          echo "ERROR: service did not respond after 2 attempts (last status: $STATUS)"
+          exit 1
