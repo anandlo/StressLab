@@ -876,7 +876,7 @@ if os.path.isdir(FRONTEND_DIST):
                      "/session", "/results", "/library",
                      "/login", "/register", "/mfa-verify", "/mfa-setup",
                      "/verify-email", "/projects", "/support", "/briefing",
-                     "/account"):
+                     "/account", "/forgot-password", "/reset-password"):
         _route_html = os.path.join(FRONTEND_DIST, f"{_prefix.lstrip('/')}.html")
         if not os.path.isfile(_route_html):
             _route_html = os.path.join(FRONTEND_DIST, "index.html")
