@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { getMe, loginUser, registerUser } from "./api";
+import { getMe, loginUser, registerUser, refreshAuthToken } from "./api";
 import type { User } from "./types";
 
 const TOKEN_KEY = "stresslab_token";
@@ -81,6 +81,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(null);
       setUser(null);
     }
+  }, [token]);
+
+  // Silently refresh the access token every 50 minutes (token expires in 60)
+  useEffect(() => {
+    if (!token) return;
+    const REFRESH_MS = 50 * 60 * 1000;
+    const id = setInterval(async () => {
+      try {
+        const res = await refreshAuthToken(token);
+        localStorage.setItem(TOKEN_KEY, res.access_token);
+        setToken(res.access_token);
+        setUser(res.user);
+      } catch {
+        // Token likely expired or invalid; force logout
+        localStorage.removeItem(TOKEN_KEY);
+        setToken(null);
+        setUser(null);
+      }
+    }, REFRESH_MS);
+    return () => clearInterval(id);
   }, [token]);
 
   return (

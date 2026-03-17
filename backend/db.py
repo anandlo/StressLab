@@ -110,6 +110,8 @@ def init_db() -> None:
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_secret_pending TEXT;
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS field_templates JSONB DEFAULT '[]';
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token TEXT;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires TEXT;
                 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS owner_id TEXT;
             """)
         conn.commit()

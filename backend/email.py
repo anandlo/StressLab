@@ -86,3 +86,34 @@ def send_verification_email(email: str, token: str) -> None:
             logger.error("SMTP failed for %s: %s", email, exc)
 
     logger.info("No email provider configured -- verification URL for %s: %s", email, verify_url)
+
+
+def send_password_reset_email(email: str, token: str) -> None:
+    reset_url = f"{APP_URL}/reset-password?token={token}"
+    subject = "Reset your StressLab password"
+    body = (
+        f"Hello,\n\n"
+        f"We received a request to reset the password for your StressLab account.\n\n"
+        f"Click the link below to set a new password:\n\n"
+        f"  {reset_url}\n\n"
+        f"This link expires in 1 hour.\n\n"
+        f"If you did not request a password reset, you can safely ignore this message."
+    )
+
+    if RESEND_API_KEY:
+        try:
+            _send_via_resend(email, subject, body)
+            logger.info("Password reset email sent via Resend to %s", email)
+            return
+        except Exception as exc:
+            logger.error("Resend failed for %s: %s", email, exc)
+
+    if SMTP_HOST and SMTP_USER and SMTP_PASSWORD:
+        try:
+            _send_via_smtp(email, subject, body)
+            logger.info("Password reset email sent via SMTP to %s", email)
+            return
+        except Exception as exc:
+            logger.error("SMTP failed for %s: %s", email, exc)
+
+    logger.info("No email provider configured -- password reset URL for %s: %s", email, reset_url)

@@ -18,6 +18,7 @@ USERS_FILE = os.path.join(DATA_DIR, "users.json")
 _ALLOWED_USER_FIELDS = {
     "phone", "display_name", "password_hash", "email_verified", "email_verify_token",
     "mfa_enabled", "mfa_secret", "mfa_secret_pending", "field_templates",
+    "password_reset_token", "password_reset_expires",
 }
 
 
@@ -165,6 +166,38 @@ def consume_email_verify_token(token: str) -> bool:
             _save(db)
             return True
     return False
+
+
+def get_user_by_reset_token(token: str) -> dict | None:
+    """Look up a user by password reset token. Returns None if token is missing or expired."""
+    from datetime import datetime
+    if _db.DATABASE_URL:
+        conn = _db.get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT * FROM users WHERE password_reset_token = %s",
+                    (token,)
+                )
+                row = cur.fetchone()
+                if not row:
+                    return None
+                user = dict(row)
+        finally:
+            conn.close()
+    else:
+        db = _load()
+        user = None
+        for u in db.values():
+            if u.get("password_reset_token") == token:
+                user = u
+                break
+        if not user:
+            return None
+    expires = user.get("password_reset_expires")
+    if not expires or datetime.fromisoformat(expires) < datetime.now():
+        return None
+    return user
 
 
 def delete_user(user_id: str) -> bool:

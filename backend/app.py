@@ -10,6 +10,7 @@ import re
 import secrets
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,7 +36,7 @@ from .auth import (
 )
 from .users import (
     create_user, get_user_by_email, get_user_by_id, update_user, user_public,
-    consume_email_verify_token, delete_user,
+    consume_email_verify_token, delete_user, get_user_by_reset_token,
 )
 from .projects import (
     list_projects, get_project, create_project, update_project,
@@ -44,7 +45,7 @@ from .projects import (
 from .user_protocols import (
     list_user_protocols, create_user_protocol, delete_user_protocol,
 )
-from .email import send_verification_email
+from .email import send_verification_email, send_password_reset_email
 from .db import init_db, DatabaseUnavailable
 
 logger = logging.getLogger(__name__)
@@ -368,6 +369,58 @@ def change_password(body: ChangePasswordBody, user: dict = Depends(_require_auth
                             "Password too long (max 72 characters)")
     update_user(user["id"], password_hash=hash_password(body.new_password))
     return {"ok": True}
+
+
+class ForgotPasswordBody(BaseModel):
+    email: str
+
+
+@app.post("/api/auth/forgot-password")
+def forgot_password(body: ForgotPasswordBody, request: Request):
+    _check_rate_limit(f"forgot:{request.client.host}")
+    email = body.email.strip().lower()
+    # Always return the same generic message to prevent email enumeration
+    generic = "If that address is registered, a password reset link has been sent."
+    user = get_user_by_email(email)
+    if not user:
+        return {"ok": True, "message": generic}
+    reset_token = secrets.token_urlsafe(32)
+    expires = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    update_user(user["id"], password_reset_token=reset_token, password_reset_expires=expires)
+    send_password_reset_email(email, reset_token)
+    return {"ok": True, "message": generic}
+
+
+class ResetPasswordBody(BaseModel):
+    token: str
+    new_password: str
+
+
+@app.post("/api/auth/reset-password")
+def reset_password(body: ResetPasswordBody):
+    if len(body.new_password) < 8:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Password must be at least 8 characters")
+    if len(body.new_password) > 72:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Password too long (max 72 characters)")
+    user = get_user_by_reset_token(body.token)
+    if not user:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired reset link")
+    update_user(
+        user["id"],
+        password_hash=hash_password(body.new_password),
+        password_reset_token=None,
+        password_reset_expires=None,
+    )
+    return {"ok": True, "message": "Password has been reset. You can now sign in."}
+
+
+@app.post("/api/auth/refresh")
+def refresh_token(user: dict = Depends(_require_auth)):
+    """Issue a fresh access token for an already-authenticated user."""
+    new_token = create_token({"sub": user["id"], "type": "access"})
+    return {"access_token": new_token, "user": user_public(user)}
 
 
 class LoginBody(BaseModel):

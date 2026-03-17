@@ -194,6 +194,34 @@ export function changePassword(
   });
 }
 
+export function forgotPassword(email: string): Promise<{ ok: boolean; message: string }> {
+  return fetchJSON("/api/auth/forgot-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(
+  token: string,
+  newPassword: string,
+): Promise<{ ok: boolean; message: string }> {
+  return fetchJSON("/api/auth/reset-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+}
+
+export function refreshAuthToken(
+  token: string,
+): Promise<{ access_token: string; user: User }> {
+  return fetchJSON("/api/auth/refresh", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export function updateProfile(
   token: string,
   phone: string | null,
