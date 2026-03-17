@@ -100,13 +100,11 @@ class PASAT(BaseParadigm):
                 explanation=f"First number in the series: {current}")
         answer = self._prev + current
         prev_for_explanation = self._prev
-        # Include the previous number in the stimulus so participants don't
-        # have to remember it across interleaved paradigms.
         trial = self._trial(
             difficulty, time_limit,
-            stimulus={"current": current, "previous": prev_for_explanation, "pasat": True, "is_first": False},
+            stimulus={"current": current, "pasat": True, "is_first": False},
             correct_answer=str(answer),
-            instruction="Add these two numbers. Type the sum.",
+            instruction="Add this number to the one you saw last trial. Type the sum.",
             explanation=f"{prev_for_explanation} + {current} = {answer}")
         self._prev = current
         return trial

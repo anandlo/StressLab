@@ -91,6 +91,9 @@ function ProtocolContent() {
   const [selectedParadigms, setSelectedParadigms] = useState<Set<string>>(
     paradigmParam ? new Set([paradigmParam]) : new Set()
   );
+
+  // Paradigms that require cross-trial memorization -- only one allowed at a time
+  const CROSS_TRIAL_MEMORY = new Set(["pasat", "n_back", "operation_span"]);
   const [participantId, setParticipantId] = useState(participantParam ?? "");
   const [duration, setDuration] = useState("10");
   const [intensity, setIntensity] = useState<Intensity>(Intensity.MEDIUM);
@@ -144,8 +147,19 @@ function ProtocolContent() {
   function toggleParadigm(id: string) {
     setSelectedParadigms((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        // Enforce: at most one cross-trial memory paradigm
+        if (CROSS_TRIAL_MEMORY.has(id)) {
+          const existing = [...prev].find((p) => CROSS_TRIAL_MEMORY.has(p));
+          if (existing) {
+            toast.error("Only one memorization paradigm can be active at a time. Remove the other one first.");
+            return prev;
+          }
+        }
+        next.add(id);
+      }
       return next;
     });
   }
@@ -314,14 +328,21 @@ function ProtocolContent() {
               </div>
 
               <div className="grid gap-2 sm:grid-cols-2">
-                {filteredParadigms.map((p) => (
-                  <ParadigmCard
-                    key={p.id}
-                    paradigm={p}
-                    selected={selectedParadigms.has(p.id)}
-                    onToggle={() => toggleParadigm(p.id)}
-                  />
-                ))}
+                {filteredParadigms.map((p) => {
+                  const memoryConflict =
+                    !selectedParadigms.has(p.id) &&
+                    CROSS_TRIAL_MEMORY.has(p.id) &&
+                    [...selectedParadigms].some((s) => CROSS_TRIAL_MEMORY.has(s));
+                  return (
+                    <ParadigmCard
+                      key={p.id}
+                      paradigm={p}
+                      selected={selectedParadigms.has(p.id)}
+                      disabled={memoryConflict}
+                      onToggle={() => toggleParadigm(p.id)}
+                    />
+                  );
+                })}
               </div>
             </TabsContent>
 
@@ -727,18 +748,24 @@ function ProtocolContent() {
 function ParadigmCard({
   paradigm,
   selected,
+  disabled,
   onToggle,
 }: {
   paradigm: ParadigmMeta;
   selected: boolean;
+  disabled?: boolean;
   onToggle: () => void;
 }) {
   return (
     <motion.div
-      whileTap={{ scale: 0.98 }}
-      onClick={onToggle}
-      className={`cursor-pointer rounded-lg border p-3 transition-all hover:shadow-sm ${
-        selected ? "border-primary bg-primary/5 ring-1 ring-primary" : ""
+      whileTap={disabled ? undefined : { scale: 0.98 }}
+      onClick={disabled ? undefined : onToggle}
+      className={`rounded-lg border p-3 transition-all ${
+        disabled
+          ? "opacity-50 cursor-not-allowed"
+          : `cursor-pointer hover:shadow-sm ${
+              selected ? "border-primary bg-primary/5 ring-1 ring-primary" : ""
+            }`
       }`}
     >
       <div className="flex items-start justify-between">

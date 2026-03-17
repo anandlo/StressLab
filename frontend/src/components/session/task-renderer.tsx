@@ -862,26 +862,17 @@ function TaskRendererInner({ trial, onPvtResponse }: { trial: Trial; onPvtRespon
           />
         );
       }
-      // PASAT: show current number and (when available) the previous number
+      // PASAT: show only the current number -- participant must remember the previous one
       const pasatCurr = s.current as number | undefined;
       if (s.pasat === true && pasatCurr !== undefined) {
         const isFirst = s.is_first === true;
-        const pasatPrev = s.previous as number | undefined;
         return (
           <div className="flex flex-col items-center justify-center py-8 gap-3">
-            {!isFirst && pasatPrev !== undefined ? (
-              <div className="flex items-center gap-4">
-                <span className="text-5xl font-mono font-bold text-muted-foreground">{pasatPrev}</span>
-                <span className="text-3xl font-bold text-muted-foreground">+</span>
-                <span className="text-8xl font-mono font-bold text-primary">{pasatCurr}</span>
-              </div>
-            ) : (
-              <span className="text-8xl font-mono font-bold text-primary">{pasatCurr}</span>
-            )}
+            <span className="text-8xl font-mono font-bold text-primary">{pasatCurr}</span>
             <span className="text-xs text-muted-foreground">
               {isFirst
                 ? "This is the first number. Type it to confirm, then the next trial will ask you to add."
-                : "Add these two numbers"}
+                : "Add this to the previous number"}
             </span>
           </div>
         );
