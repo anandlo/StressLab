@@ -1,5 +1,8 @@
-# Pings the Render health endpoint every 14 minutes to prevent the free-tier
-# dyno from spinning down (Render spins down after 15 minutes of inactivity).
+# Pings the Render health endpoint every 10 minutes to prevent the free-tier
+# service from spinning down (Render spins down after 15 minutes of inactivity).
+# Using 10-minute intervals instead of 14 because GitHub Actions cron can be
+# delayed by several minutes, which would push a 14-minute schedule past the
+# 15-minute inactivity threshold.
 #
 # Setup: add your deployed URL as a GitHub Actions secret named RENDER_URL.
 # Example value: https://stresslab.onrender.com
@@ -9,7 +12,7 @@ name: Render keepalive
 
 on:
   schedule:
-    - cron: "*/14 * * * *"
+    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 jobs:
