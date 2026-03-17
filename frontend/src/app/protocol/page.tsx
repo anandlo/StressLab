@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/tabs";
 import { useParadigms, useProtocols, useParticipants } from "@/hooks/use-queries";
 import { Intensity, type SoundType, type ParadigmMeta, type SessionConfig } from "@/lib/types";
-import { listUserProtocols, saveUserProtocol, deleteUserProtocol, type UserProtocolConfig } from "@/lib/api";
+import { listUserProtocols, saveUserProtocol, deleteUserProtocol, listProjects, type UserProtocolConfig } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
   Tooltip,
@@ -102,6 +102,12 @@ function ProtocolContent() {
   const [soundCountdown, setSoundCountdown] = useState(false);
   const [soundType, setSoundType] = useState<SoundType>("tick");
 
+  // Session naming + project assignment
+  const [sessionName, setSessionName] = useState("");
+  const [autoName, setAutoName] = useState(true);
+  const [projectId, setProjectId] = useState("");
+  const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([]);
+
   // User-saved protocols
   const [savedProtocols, setSavedProtocols] = useState<UserProtocolConfig[]>([]);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -119,6 +125,11 @@ function ProtocolContent() {
   useEffect(() => {
     loadSavedProtocols();
   }, [loadSavedProtocols]);
+
+  useEffect(() => {
+    if (!token) return;
+    listProjects(token).then(setProjects).catch(() => {});
+  }, [token]);
 
   const preset = protocols?.find((p) => p.id === selectedPreset);
 
@@ -199,6 +210,8 @@ function ProtocolContent() {
       rest_duration_sec: parseInt(restDuration, 10),
       practice_enabled: practiceEnabled,
       practice_trials_per_paradigm: 1,
+      ...(autoName ? {} : { session_name: sessionName.trim() }),
+      ...(projectId ? { project_id: projectId } : {}),
     };
 
     const encoded = encodeURIComponent(JSON.stringify(config));
@@ -380,6 +393,51 @@ function ProtocolContent() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Session naming */}
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm">Session Name</Label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoName}
+                      onChange={(e) => setAutoName(e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-input"
+                    />
+                    <span className="text-xs text-muted-foreground">Auto</span>
+                  </label>
+                </div>
+                {!autoName && (
+                  <Input
+                    placeholder="e.g. Pilot Session 3"
+                    value={sessionName}
+                    onChange={(e) => setSessionName(e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                )}
+              </div>
+
+              {/* Optionally assign to a project */}
+              {token && projects.length > 0 && (
+                <div className="grid gap-2">
+                  <Label className="flex items-center text-sm">
+                    Project
+                    <InfoTip text="Optionally assign this session to a project. You can also attach sessions to projects later from the Projects page." />
+                  </Label>
+                  <Select value={projectId} onValueChange={(v) => setProjectId(v === "none" ? "" : v ?? "")}>
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="None (assign later)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {projects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
@@ -616,7 +674,7 @@ function ProtocolContent() {
                   />
                 </div>
               </div>
-              {user && (
+              {user && mode === "custom" && selectedParadigms.size > 0 && (
                 <>
                   {saveDialogOpen ? (
                     <div className="flex gap-2">

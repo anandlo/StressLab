@@ -88,6 +88,8 @@ export interface SessionConfig {
   sound_clicks_enabled: boolean;
   sound_countdown_enabled: boolean;
   sound_type: SoundType;
+  session_name?: string;
+  project_id?: string;
 }
 
 export interface SessionScore {
@@ -162,7 +164,8 @@ export type WSOutgoingMessage =
   | { type: "request_trial" }
   | { type: "submit_response"; trial_id: string; response: string; response_time_ms: number; timed_out: boolean }
   | { type: "rest_complete" }
-  | { type: "stop_session" };
+  | { type: "stop_session" }
+  | { type: "discard_session" };
 
 export type WSIncomingMessage =
   | { type: "session_started"; score: SessionScore; guest?: boolean }
@@ -171,6 +174,7 @@ export type WSIncomingMessage =
   | { type: "rest"; data: { duration_sec: number; block_completed: number; total_blocks: number } }
   | { type: "rest_ended"; score: SessionScore }
   | { type: "session_complete"; data: SessionSummary; session_file: string | null; guest?: boolean }
+  | { type: "session_discarded" }
   | { type: "error"; message: string };
 
 export interface User {

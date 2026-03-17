@@ -642,9 +642,17 @@ async def session_websocket(websocket: WebSocket):
         if not save_to_server:
             return None
         summ = s.get_summary()
-        filepath = save_session(summ, owner_id)
+        custom_name = s.config.session_name or None
+        filepath = save_session(summ, owner_id, session_name=custom_name)
+        fname = os.path.basename(filepath)
         add_session_file(s.config.participant_id, filepath)
-        return os.path.basename(filepath)
+        # Auto-attach to project if requested
+        if s.config.project_id:
+            try:
+                add_session_to_project(s.config.project_id, fname)
+            except Exception:
+                pass  # Non-critical: session is saved but project link failed
+        return fname
 
     try:
         while True:
@@ -771,6 +779,12 @@ async def session_websocket(websocket: WebSocket):
                     "session_file": session_file,
                     "guest": not save_to_server,
                 })
+                break
+
+            elif msg_type == "discard_session":
+                if session is not None:
+                    event_marker.session_end(session.config.participant_id)
+                await websocket.send_json({"type": "session_discarded"})
                 break
 
     except WebSocketDisconnect:

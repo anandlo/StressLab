@@ -102,6 +102,8 @@ class SessionConfig(BaseModel):
     practice_enabled: bool = True
     practice_trials_per_paradigm: int = 1
     starting_difficulty: int = 1
+    session_name: str = ""
+    project_id: str = ""
 
 
 class SessionSummary(BaseModel):

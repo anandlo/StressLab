@@ -8,6 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -49,6 +57,7 @@ function SessionContent() {
     submitResponse,
     restComplete,
     stop,
+    discard,
   } = useSessionWS();
 
   const { playTrialStart, playCorrect, playIncorrect, playRest, playSessionEnd, playTick, playCountdownBeep } = useSound();
@@ -59,6 +68,7 @@ function SessionContent() {
   const [soundClicks, setSoundClicks] = useState(true);
   const [soundCountdown, setSoundCountdown] = useState(true);
   const [soundType, setSoundType] = useState<SoundType>("tick");
+  const [stopDialogOpen, setStopDialogOpen] = useState(false);
 
   useEffect(() => {
     if (trial) {
@@ -155,6 +165,12 @@ function SessionContent() {
         </Card>
       </div>
     );
+  }
+
+  if (state === SessionState.COMPLETE && !summary) {
+    // Discarded — go back to protocol
+    router.push("/protocol");
+    return null;
   }
 
   if (state === SessionState.COMPLETE && summary) {
@@ -281,7 +297,7 @@ function SessionContent() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => { if (confirm("Stop this session? Data collected so far will still be saved.")) stop(); }}
+            onClick={() => setStopDialogOpen(true)}
             className="text-destructive hover:text-destructive"
           >
             <Square className="h-4 w-4 mr-1" />
@@ -289,6 +305,32 @@ function SessionContent() {
           </Button>
         </div>
       </div>
+
+      {/* Stop session dialog */}
+      <Dialog open={stopDialogOpen} onOpenChange={setStopDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Stop Session</DialogTitle>
+            <DialogDescription>
+              What would you like to do with the data collected so far?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
+            <Button variant="outline" onClick={() => setStopDialogOpen(false)}>
+              Continue
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => { setStopDialogOpen(false); discard(); }}
+            >
+              Discard
+            </Button>
+            <Button onClick={() => { setStopDialogOpen(false); stop(); }}>
+              Save &amp; Exit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {score && <ScoreBoard score={score} />}
 

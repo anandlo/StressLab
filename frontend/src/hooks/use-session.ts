@@ -35,6 +35,7 @@ interface UseSessionReturn {
   requestTrial: () => void;
   restComplete: () => void;
   stop: () => void;
+  discard: () => void;
 }
 
 export function useSessionWS(): UseSessionReturn {
@@ -121,6 +122,12 @@ export function useSessionWS(): UseSessionReturn {
           setSessionFile(msg.session_file ?? null);
           break;
 
+        case "session_discarded":
+          setState(SessionState.COMPLETE);
+          setSummary(null);
+          setSessionFile(null);
+          break;
+
         case "error":
           setError(msg.message);
           break;
@@ -203,6 +210,10 @@ export function useSessionWS(): UseSessionReturn {
     send({ type: "stop_session" });
   }, []);
 
+  const discard = useCallback(() => {
+    send({ type: "discard_session" });
+  }, []);
+
   useEffect(() => {
     return () => {
       wsRef.current?.close();
@@ -225,5 +236,6 @@ export function useSessionWS(): UseSessionReturn {
     requestTrial,
     restComplete,
     stop,
+    discard,
   };
 }

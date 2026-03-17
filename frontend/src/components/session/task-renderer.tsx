@@ -6,7 +6,7 @@ import { StimulusType } from "@/lib/types";
 
 /**
  * RuleChangeGate: when a non-empty notice string is provided, shows the
- * notice for 2 seconds before revealing children (the actual stimulus).
+ * notice until the user explicitly clicks "Next" before revealing children.
  */
 function RuleChangeGate({
   notice,
@@ -20,15 +20,19 @@ function RuleChangeGate({
   useEffect(() => {
     if (!notice) { setGated(false); return; }
     setGated(true);
-    const t = setTimeout(() => setGated(false), 2000);
-    return () => clearTimeout(t);
   }, [notice]);
 
   if (gated && notice) {
     return (
-      <div className="flex flex-col items-center justify-center py-10 gap-3">
+      <div className="flex flex-col items-center justify-center py-10 gap-4">
         <span className="text-xs uppercase tracking-wide font-semibold text-amber-500">Rule Change</span>
         <p className="text-sm text-center max-w-sm font-medium">{notice}</p>
+        <button
+          className="mt-2 px-4 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          onClick={() => setGated(false)}
+        >
+          Next
+        </button>
       </div>
     );
   }
@@ -858,17 +862,26 @@ function TaskRendererInner({ trial, onPvtResponse }: { trial: Trial; onPvtRespon
           />
         );
       }
-      // PASAT: show only the current number -- participant must hold the previous in memory
+      // PASAT: show current number and (when available) the previous number
       const pasatCurr = s.current as number | undefined;
       if (s.pasat === true && pasatCurr !== undefined) {
         const isFirst = s.is_first === true;
+        const pasatPrev = s.previous as number | undefined;
         return (
           <div className="flex flex-col items-center justify-center py-8 gap-3">
-            <span className="text-8xl font-mono font-bold text-primary">{pasatCurr}</span>
+            {!isFirst && pasatPrev !== undefined ? (
+              <div className="flex items-center gap-4">
+                <span className="text-5xl font-mono font-bold text-muted-foreground">{pasatPrev}</span>
+                <span className="text-3xl font-bold text-muted-foreground">+</span>
+                <span className="text-8xl font-mono font-bold text-primary">{pasatCurr}</span>
+              </div>
+            ) : (
+              <span className="text-8xl font-mono font-bold text-primary">{pasatCurr}</span>
+            )}
             <span className="text-xs text-muted-foreground">
               {isFirst
                 ? "This is the first number. Type it to confirm, then the next trial will ask you to add."
-                : "Add this to the number from the previous trial"}
+                : "Add these two numbers"}
             </span>
           </div>
         );

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import {
   Target,
   Clock,
-  Activity,
+  Hash,
   Timer,
   Download,
   ChevronLeft,
@@ -489,7 +489,7 @@ function ResultsContent() {
               explanation="Proportion of trials answered correctly across all paradigms in this session. Timed-out trials count as incorrect."
             />
             <StatCard
-              icon={Activity}
+              icon={Hash}
               label="Total Tasks"
               value={String(summary.total_tasks)}
               explanation="Total number of trials presented in this session, including timeouts and incorrect responses."

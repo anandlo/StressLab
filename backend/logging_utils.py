@@ -12,9 +12,15 @@ def _get_db():
     return _db
 
 
-def save_session(summary: SessionSummary, owner_id: str | None = None) -> str:
+def save_session(summary: SessionSummary, owner_id: str | None = None,
+                 session_name: str | None = None) -> str:
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"stress_session_{summary.participant_id}_{ts}.json"
+    if session_name:
+        # Sanitize user-provided name: keep alphanumeric, dash, underscore
+        safe = "".join(c if c.isalnum() or c in "-_ " else "" for c in session_name).strip().replace(" ", "_")
+        filename = f"{safe}_{ts}.json" if safe else f"stress_session_{summary.participant_id}_{ts}.json"
+    else:
+        filename = f"stress_session_{summary.participant_id}_{ts}.json"
     _db = _get_db()
     if _db.DATABASE_URL:
         conn = _db.get_conn()
