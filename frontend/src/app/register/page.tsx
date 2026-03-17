@@ -29,7 +29,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await register(email.trim(), password, phone.trim() || undefined);
-      toast.success("Account created. Check server logs for your email verification link.");
+      toast.success("Account created! Check your email for a verification link.");
       // Auto-login after registration
       const result = await login(email.trim(), password);
       if (result.mfa_required && result.mfa_token) {

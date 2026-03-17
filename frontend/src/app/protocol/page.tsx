@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import {
   FlaskConical,
   Play,
@@ -163,9 +164,11 @@ function ProtocolContent() {
 
   async function handleDeleteSaved(id: string) {
     if (!token) return;
+    if (!confirm("Delete this saved protocol?")) return;
     try {
       await deleteUserProtocol(token, id);
       await loadSavedProtocols();
+      toast.success("Protocol deleted");
     } catch { /* ignore */ }
   }
 

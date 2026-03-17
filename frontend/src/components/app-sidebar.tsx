@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { toast } from "sonner";
 import {
   LayoutDashboard,
   Users,
@@ -121,7 +122,7 @@ export function AppSidebar() {
               variant="ghost"
               size="sm"
               className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
-              onClick={logout}
+              onClick={() => { logout(); toast.success("Signed out"); }}
             >
               <LogOut className="h-4 w-4" />
               <span className="text-[12px]">Sign out</span>

@@ -102,6 +102,14 @@ function SessionContent() {
     prevStateRef.current = state;
   }, [state, playRest, playSessionEnd]);
 
+  // Warn before tab close during active session
+  useEffect(() => {
+    if (!started || state === SessionState.COMPLETE) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [started, state]);
+
   useEffect(() => {
     if (!configStr) return;
     if (!started) {
@@ -273,7 +281,7 @@ function SessionContent() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={stop}
+            onClick={() => { if (confirm("Stop this session? Data collected so far will still be saved.")) stop(); }}
             className="text-destructive hover:text-destructive"
           >
             <Square className="h-4 w-4 mr-1" />

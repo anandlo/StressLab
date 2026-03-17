@@ -102,6 +102,7 @@ export default function ProjectsPage() {
   }
 
   async function handleDetach(projectId: string, filename: string) {
+    if (!confirm("Remove this session from the project?")) return;
     try {
       await detachSessionFromProject(token ?? "", projectId, filename);
       toast.success("Session removed from project");

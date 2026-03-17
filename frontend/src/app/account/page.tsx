@@ -181,6 +181,7 @@ export default function AccountPage() {
 
   async function handleMfaDisable() {
     if (!token) return;
+    if (!confirm("Disable two-factor authentication? Your account will be less secure.")) return;
     setMfaLoading(true);
     try {
       await mfaDisable(token);
