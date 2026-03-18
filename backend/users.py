@@ -187,7 +187,7 @@ def consume_email_verify_token(token: str) -> bool:
 
 def get_user_by_reset_token(token: str) -> dict | None:
     """Look up a user by password reset token. Returns None if token is missing or expired."""
-    from datetime import datetime
+    from datetime import datetime, timezone
     if _db.DATABASE_URL:
         conn = _db.get_conn()
         try:
@@ -212,7 +212,7 @@ def get_user_by_reset_token(token: str) -> dict | None:
         if not user:
             return None
     expires = user.get("password_reset_expires")
-    if not expires or datetime.fromisoformat(expires) < datetime.now():
+    if not expires or datetime.fromisoformat(expires) < datetime.now(timezone.utc):
         return None
     return user
 
