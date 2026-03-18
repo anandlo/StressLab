@@ -13,7 +13,7 @@ import { ApiError } from "@/lib/api";
 import { PasswordStrength } from "@/components/password-strength";
 
 export default function RegisterPage() {
-  const { register, login } = useAuth();
+  const { register } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,13 +30,7 @@ export default function RegisterPage() {
     try {
       await register(email.trim(), password, phone.trim() || undefined);
       toast.success("Account created! Check your email for a verification link.");
-      // Auto-login after registration
-      const result = await login(email.trim(), password);
-      if (result.mfa_required && result.mfa_token) {
-        router.push(`/mfa-verify?token=${encodeURIComponent(result.mfa_token)}`);
-      } else {
-        router.push("/");
-      }
+      router.push("/login");
     } catch (err) {
       if (err instanceof ApiError) {
         switch (err.status) {

@@ -40,7 +40,7 @@ import {
 } from "@/lib/api";
 
 export default function AccountPage() {
-  const { user, token, loading, logout, refreshUser } = useAuth();
+  const { user, token, loading, logout, refreshUser, setTokenAndUser } = useAuth();
   const router = useRouter();
 
   // Profile
@@ -128,7 +128,12 @@ export default function AccountPage() {
     }
     setSavingPw(true);
     try {
-      await changePassword(token, oldPw, newPw);
+      const result = await changePassword(token, oldPw, newPw);
+      // Backend increments token_version on password change; use the fresh token
+      // it returns so this session stays valid.
+      if (result.access_token && user) {
+        setTokenAndUser(result.access_token, user);
+      }
       toast.success("Password changed");
       setOldPw("");
       setNewPw("");

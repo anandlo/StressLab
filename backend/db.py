@@ -112,6 +112,10 @@ def init_db() -> None:
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_token TEXT;
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_reset_expires TEXT;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verify_token_expires TEXT;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 0;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER DEFAULT 0;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS lockout_until TEXT;
                 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS owner_id TEXT;
             """)
         conn.commit()

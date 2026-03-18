@@ -186,7 +186,7 @@ export function changePassword(
   token: string,
   oldPassword: string,
   newPassword: string,
-): Promise<{ ok: boolean }> {
+): Promise<{ ok: boolean; access_token?: string }> {
   return fetchJSON("/api/auth/change-password", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -217,6 +217,13 @@ export function refreshAuthToken(
   token: string,
 ): Promise<{ access_token: string; user: User }> {
   return fetchJSON("/api/auth/refresh", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function logoutUser(token: string): Promise<{ ok: boolean }> {
+  return fetchJSON("/api/auth/logout", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });

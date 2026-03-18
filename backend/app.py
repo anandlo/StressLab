@@ -115,11 +115,11 @@ _MAX_ATTEMPTS = 10
 _WINDOW_SEC = 300  # 5 minutes
 
 
-def _check_rate_limit(key: str) -> None:
+def _check_rate_limit(key: str, max_attempts: int = _MAX_ATTEMPTS) -> None:
     now = time.time()
     bucket = _login_attempts[key]
     bucket[:] = [t for t in bucket if now - t < _WINDOW_SEC]
-    if len(bucket) >= _MAX_ATTEMPTS:
+    if len(bucket) >= max_attempts:
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS,
                             "Too many attempts. Try again in 5 minutes.")
     bucket.append(now)
@@ -134,7 +134,13 @@ def _get_optional_user(
         payload = decode_token(credentials.credentials)
         if payload.get("type") != "access":
             return None
-        return get_user_by_id(payload["sub"])
+        user = get_user_by_id(payload["sub"])
+        if user is None:
+            return None
+        # token_version mismatch means the token was invalidated (logout / password change)
+        if payload.get("tv", 0) != (user.get("token_version") or 0):
+            return None
+        return user
     except JWTError:
         return None
 
@@ -347,7 +353,8 @@ def resend_verification(body: ResendVerificationBody, request: Request):
     if not user or user.get("email_verified"):
         return {"ok": True, "message": generic}
     new_token = secrets.token_urlsafe(32)
-    update_user(user["id"], email_verify_token=new_token)
+    new_expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+    update_user(user["id"], email_verify_token=new_token, email_verify_token_expires=new_expires)
     send_verification_email(email, new_token)
     return {"ok": True, "message": generic}
 
@@ -367,8 +374,11 @@ def change_password(body: ChangePasswordBody, user: dict = Depends(_require_auth
     if len(body.new_password) > 72:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
                             "Password too long (max 72 characters)")
-    update_user(user["id"], password_hash=hash_password(body.new_password))
-    return {"ok": True}
+    new_version = (user.get("token_version") or 0) + 1
+    update_user(user["id"], password_hash=hash_password(body.new_password), token_version=new_version)
+    # Return a fresh token so the current session remains valid after the version bump
+    new_token = create_token({"sub": user["id"], "type": "access", "tv": new_version})
+    return {"ok": True, "access_token": new_token}
 
 
 class ForgotPasswordBody(BaseModel):
@@ -397,7 +407,8 @@ class ResetPasswordBody(BaseModel):
 
 
 @app.post("/api/auth/reset-password")
-def reset_password(body: ResetPasswordBody):
+def reset_password(body: ResetPasswordBody, request: Request):
+    _check_rate_limit(f"reset:{request.client.host}")
     if len(body.new_password) < 8:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
                             "Password must be at least 8 characters")
@@ -407,11 +418,15 @@ def reset_password(body: ResetPasswordBody):
     user = get_user_by_reset_token(body.token)
     if not user:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired reset link")
+    new_version = (user.get("token_version") or 0) + 1
     update_user(
         user["id"],
         password_hash=hash_password(body.new_password),
         password_reset_token=None,
         password_reset_expires=None,
+        token_version=new_version,
+        lockout_until=None,
+        failed_login_attempts=0,
     )
     return {"ok": True, "message": "Password has been reset. You can now sign in."}
 
@@ -419,8 +434,17 @@ def reset_password(body: ResetPasswordBody):
 @app.post("/api/auth/refresh")
 def refresh_token(user: dict = Depends(_require_auth)):
     """Issue a fresh access token for an already-authenticated user."""
-    new_token = create_token({"sub": user["id"], "type": "access"})
+    token_version = user.get("token_version") or 0
+    new_token = create_token({"sub": user["id"], "type": "access", "tv": token_version})
     return {"access_token": new_token, "user": user_public(user)}
+
+
+@app.post("/api/auth/logout")
+def logout(user: dict = Depends(_require_auth)):
+    """Invalidate all existing sessions by incrementing token_version."""
+    new_version = (user.get("token_version") or 0) + 1
+    update_user(user["id"], token_version=new_version)
+    return {"ok": True}
 
 
 class LoginBody(BaseModel):
@@ -434,11 +458,37 @@ def login(body: LoginBody, request: Request):
     email = body.email.strip().lower()
     user = get_user_by_email(email)
     if not user or not verify_password(body.password, user["password_hash"]):
+        # Increment failed attempts on valid-email wrong-password (but avoid enumeration
+        # by only updating when user actually exists)
+        if user:
+            attempts = (user.get("failed_login_attempts") or 0) + 1
+            updates: dict = {"failed_login_attempts": attempts}
+            if attempts >= 5:
+                lockout_until = (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+                updates["lockout_until"] = lockout_until
+            update_user(user["id"], **updates)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
+    # Check per-user lockout
+    lockout_until = user.get("lockout_until")
+    if lockout_until:
+        if datetime.fromisoformat(lockout_until) > datetime.now(timezone.utc):
+            raise HTTPException(status.HTTP_423_LOCKED,
+                                "Account temporarily locked due to too many failed attempts. "
+                                "Try again in 15 minutes.")
+        # Lockout expired — clear it
+        update_user(user["id"], lockout_until=None, failed_login_attempts=0)
+    # Block unverified accounts
+    if not user.get("email_verified"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "Email address not verified. Check your inbox for the verification link.")
+    # Clear failed attempts on successful credential check
+    if user.get("failed_login_attempts"):
+        update_user(user["id"], failed_login_attempts=0)
     if user.get("mfa_enabled"):
         mfa_token = create_token({"sub": user["id"], "type": "mfa-pending"}, expires_minutes=10)
         return {"mfa_required": True, "mfa_token": mfa_token}
-    token = create_token({"sub": user["id"], "type": "access"})
+    token_version = user.get("token_version") or 0
+    token = create_token({"sub": user["id"], "type": "access", "tv": token_version})
     return {"access_token": token, "user": user_public(user)}
 
 
@@ -448,7 +498,8 @@ class MFAVerifyBody(BaseModel):
 
 
 @app.post("/api/auth/mfa/verify")
-def mfa_verify(body: MFAVerifyBody):
+def mfa_verify(body: MFAVerifyBody, request: Request):
+    _check_rate_limit(f"mfa:{request.client.host}", max_attempts=5)
     try:
         payload = decode_token(body.mfa_token)
     except JWTError:
@@ -460,7 +511,8 @@ def mfa_verify(body: MFAVerifyBody):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found")
     if not verify_totp(user["mfa_secret"], body.code):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid TOTP code")
-    token = create_token({"sub": user["id"], "type": "access"})
+    token_version = user.get("token_version") or 0
+    token = create_token({"sub": user["id"], "type": "access", "tv": token_version})
     return {"access_token": token, "user": user_public(user)}
 
 

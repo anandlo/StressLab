@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,8 +11,9 @@ import { mfaVerify } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 function MFAVerifyContent() {
-  const searchParams = useSearchParams();
-  const mfaToken = searchParams.get("token") ?? "";
+  const mfaToken = typeof window !== "undefined"
+    ? (sessionStorage.getItem("mfa_pending_token") ?? "")
+    : "";
   const { setTokenAndUser } = useAuth();
   const router = useRouter();
   const [code, setCode] = useState("");
@@ -27,9 +28,15 @@ function MFAVerifyContent() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const token = sessionStorage.getItem("mfa_pending_token") ?? "";
+    if (!token) {
+      router.push("/login");
+      return;
+    }
     setLoading(true);
     try {
-      const result = await mfaVerify(mfaToken, code.trim());
+      const result = await mfaVerify(token, code.trim());
+      sessionStorage.removeItem("mfa_pending_token");
       setTokenAndUser(result.access_token, result.user);
       toast.success("Signed in");
       router.push("/");
@@ -78,9 +85,5 @@ function MFAVerifyContent() {
 }
 
 export default function MFAVerifyPage() {
-  return (
-    <Suspense>
-      <MFAVerifyContent />
-    </Suspense>
-  );
+  return <MFAVerifyContent />;
 }

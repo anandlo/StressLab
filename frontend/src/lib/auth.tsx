@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { getMe, loginUser, registerUser, refreshAuthToken } from "./api";
+import { getMe, loginUser, registerUser, refreshAuthToken, logoutUser } from "./api";
 import type { User } from "./types";
 
 const TOKEN_KEY = "stresslab_token";
@@ -11,7 +11,7 @@ interface AuthContextValue {
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ mfa_required?: boolean; mfa_token?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   setTokenAndUser: (token: string, user: User) => void;
   register: (email: string, password: string, phone?: string) => Promise<{ user_id: string; message: string }>;
   refreshUser: () => Promise<void>;
@@ -55,11 +55,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {};
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const currentToken = token;
+    // Clear local state immediately so the UI responds without waiting
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setUser(null);
-  }, []);
+    // Tell the backend to increment token_version; swallow errors (e.g. already expired)
+    if (currentToken) {
+      try { await logoutUser(currentToken); } catch { /* ignore */ }
+    }
+  }, [token]);
 
   const setTokenAndUser = useCallback((t: string, u: User) => {
     localStorage.setItem(TOKEN_KEY, t);

@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
-import { ApiError } from "@/lib/api";
+import { ApiError, resendVerification } from "@/lib/api";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -17,14 +17,18 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setUnverifiedEmail(null);
     setLoading(true);
     try {
       const result = await login(email.trim(), password);
       if (result.mfa_required && result.mfa_token) {
-        router.push(`/mfa-verify?token=${encodeURIComponent(result.mfa_token)}`);
+        sessionStorage.setItem("mfa_pending_token", result.mfa_token);
+        router.push("/mfa-verify");
       } else {
         toast.success("Signed in");
         router.push("/");
@@ -34,6 +38,13 @@ export default function LoginPage() {
         switch (err.status) {
           case 401:
             toast.error("Invalid email or password");
+            break;
+          case 403:
+            setUnverifiedEmail(email.trim());
+            toast.error("Please verify your email address before signing in.");
+            break;
+          case 423:
+            toast.error("Account temporarily locked. Too many failed attempts — try again in 15 minutes.");
             break;
           case 429:
             toast.error("Too many attempts. Please wait a few minutes.");
@@ -49,6 +60,19 @@ export default function LoginPage() {
       }
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleResendVerification() {
+    if (!unverifiedEmail) return;
+    setResending(true);
+    try {
+      await resendVerification(unverifiedEmail);
+      toast.success("Verification link sent — check your inbox");
+    } catch {
+      toast.error("Failed to resend verification email");
+    } finally {
+      setResending(false);
     }
   }
 
@@ -90,8 +114,19 @@ export default function LoginPage() {
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Signing in…" : "Sign in"}
-            </Button>
-            <p className="text-center text-sm text-muted-foreground">
+            </Button>            {unverifiedEmail && (
+              <p className="text-center text-sm text-muted-foreground">
+                Didn&apos;t get the email?{" "}
+                <button
+                  type="button"
+                  className="underline underline-offset-2 hover:text-foreground"
+                  disabled={resending}
+                  onClick={handleResendVerification}
+                >
+                  {resending ? "Sending\u2026" : "Resend verification"}
+                </button>
+              </p>
+            )}            <p className="text-center text-sm text-muted-foreground">
               No account?{" "}
               <Link href="/register" className="underline underline-offset-2 hover:text-foreground">
                 Register
