@@ -84,13 +84,27 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Cognitive Stress Induction Tool", lifespan=lifespan)
 
-CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")
+# Default to the production URL; override via CORS_ORIGINS env var for local dev.
+_DEFAULT_CORS = os.environ.get("APP_URL", "https://stresslab.onrender.com")
+CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", _DEFAULT_CORS).split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
+
+# Reject request bodies over 1 MB to limit memory exhaustion from oversized payloads.
+_MAX_BODY_BYTES = 1 * 1024 * 1024  # 1 MB
+
+
+@app.middleware("http")
+async def _limit_body_size(request: Request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > _MAX_BODY_BYTES:
+        return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+    return await call_next(request)
 
 
 @app.exception_handler(DatabaseUnavailable)

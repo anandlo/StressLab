@@ -13,7 +13,7 @@ services:
       - key: DATABASE_URL
         sync: false          # Use the Supabase session-mode pooler URL (port 5432, IPv4)
       - key: CORS_ORIGINS
-        sync: false          # fill in with your Render URL after first deploy
+        value: https://stresslab.onrender.com
       - key: RESEND_API_KEY
         sync: false          # get from resend.com/api-keys
       - key: APP_URL
